@@ -50,8 +50,8 @@
         const submitButton = document.getElementById('submit-button');
         const financialCheckbox = document.getElementById('is-financial');
 
-        // This is the last URL that we confirmed was working correctly.
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxlWZT9138HO6O3OlKu-5LolhyJgt1IV1BJtc5TabNXBdb7uj2Phi7rVEBnH9isA5X11A/exec';
+        // Remember to paste your latest Web App URL here
+        const APPS_SCRIPT_URL = 'PASTE_YOUR_WORKING_URL_HERE';
 
         const fetchNames = async () => {
             const lot = lotInput.value.trim();
@@ -90,10 +90,17 @@
             statusEl.textContent = 'Submitting...';
             statusEl.style.color = '#333';
 
+            const lot = lotInput.value.trim();
             const selectedCheckboxes = document.querySelectorAll('input[name="attendee"]:checked');
             const selectedNames = Array.from(selectedCheckboxes).map(cb => cb.value);
             const isFinancial = financialCheckbox.checked;
-
+            
+            if (!lot) {
+                statusEl.textContent = 'Please enter a Lot Number.';
+                statusEl.style.color = 'red';
+                submitButton.disabled = false;
+                return;
+            }
             if (selectedNames.length === 0) {
                 statusEl.textContent = 'Please select at least one name.';
                 statusEl.style.color = 'red';
@@ -106,7 +113,7 @@
                     method: 'POST',
                     mode: 'cors',
                     headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify({ names: selectedNames, financial: isFinancial })
+                    body: JSON.stringify({ lot: lot, names: selectedNames, financial: isFinancial })
                 });
 
                 const result = await response.json();
