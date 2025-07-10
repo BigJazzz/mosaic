@@ -34,6 +34,9 @@
                     <p>Enter a Lot Number to see names.</p>
                 </div>
             </div>
+            <div class="form-group">
+                <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
+            </div>
             <button type="submit" id="submit-button">Submit</button>
             <p id="status"></p>
         </form>
@@ -45,6 +48,7 @@
         const form = document.getElementById('attendance-form');
         const statusEl = document.getElementById('status');
         const submitButton = document.getElementById('submit-button');
+        const financialCheckbox = document.getElementById('is-financial');
 
         // Your Web App URL
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwwDudiTC1CWG-rT83SenKoSksycaRfYVGYL8l3r_tHXyBnn_kHANBnqXkX-URAT38kUQ/exec';
@@ -64,7 +68,7 @@
                 const data = await response.json();
 
                 if (data.success && data.names.length > 0) {
-                    checkboxContainer.innerHTML = ''; // Clear container
+                    checkboxContainer.innerHTML = '';
                     data.names.forEach(name => {
                         const div = document.createElement('div');
                         div.className = 'checkbox-item';
@@ -88,6 +92,7 @@
 
             const selectedCheckboxes = document.querySelectorAll('input[name="attendee"]:checked');
             const selectedNames = Array.from(selectedCheckboxes).map(cb => cb.value);
+            const isFinancial = financialCheckbox.checked;
 
             if (selectedNames.length === 0) {
                 statusEl.textContent = 'Please select at least one name.';
@@ -99,9 +104,9 @@
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'cors', // This line is now corrected
+                    mode: 'cors',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ names: selectedNames })
+                    body: JSON.stringify({ names: selectedNames, financial: isFinancial })
                 });
 
                 const result = await response.json();
