@@ -31,13 +31,9 @@
                 <label for="unit-number">Unit Number</label>
                 <input type="text" id="unit-number" required>
             </div>
-             <div class="form-group">
-                <label for="event-name">Event Name (e.g., EGM)</label>
-                <input type="text" id="event-name" required>
-            </div>
             <hr>
             <div class="form-group">
-                <label>Associated Names</label>
+                <label>Associated Names (select all present)</label>
                 <div id="checkbox-container">
                     <p>Enter Lot and Unit to see names.</p>
                 </div>
@@ -58,7 +54,6 @@
         // IMPORTANT: PASTE YOUR WEB APP URL HERE
         const APPS_SCRIPT_URL = 'YOUR_WEB_APP_URL_GOES_HERE';
 
-        // --- Function to fetch names and populate checkboxes ---
         const fetchNames = async () => {
             const lot = lotInput.value.trim();
             const unit = unitInput.value.trim();
@@ -67,7 +62,6 @@
                 checkboxContainer.innerHTML = '<p>Enter Lot and Unit to see names.</p>';
                 return;
             }
-
             checkboxContainer.innerHTML = '<p>Loading names...</p>';
             
             try {
@@ -84,24 +78,21 @@
                     });
                 } else if (data.success) {
                     checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot/Unit.</p>';
-                } else {
-                    throw new Error(data.error);
-                }
+                } else { throw new Error(data.error); }
             } catch (error) {
                 console.error('Error fetching names:', error);
                 checkboxContainer.innerHTML = '<p style="color: red;">Error fetching names. Please try again.</p>';
             }
         };
 
-        // --- Function to handle form submission ---
         const handleFormSubmit = async (event) => {
             event.preventDefault();
             submitButton.disabled = true;
             statusEl.textContent = 'Submitting...';
+            statusEl.style.color = '#333';
 
             const selectedCheckboxes = document.querySelectorAll('input[name="attendee"]:checked');
             const selectedNames = Array.from(selectedCheckboxes).map(cb => cb.value);
-            const eventName = document.getElementById('event-name').value.trim();
 
             if (selectedNames.length === 0) {
                 statusEl.textContent = 'Please select at least one name.';
@@ -115,7 +106,7 @@
                     method: 'POST',
                     mode: 'cors',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ eventName: eventName, names: selectedNames })
+                    body: JSON.stringify({ names: selectedNames })
                 });
 
                 const result = await response.json();
@@ -125,24 +116,20 @@
                     statusEl.style.color = 'green';
                     form.reset();
                     checkboxContainer.innerHTML = '<p>Enter Lot and Unit to see names.</p>';
-                } else {
-                    throw new Error(result.error);
-                }
+                } else { throw new Error(result.error); }
 
             } catch (error) {
                 console.error('Submission Error:', error);
-                statusEl.textContent = 'Submission failed. See console for details.';
+                statusEl.textContent = `Submission failed: ${error.message}`;
                 statusEl.style.color = 'red';
             } finally {
                 submitButton.disabled = false;
             }
         };
 
-        // --- Add Event Listeners ---
         lotInput.addEventListener('blur', fetchNames);
         unitInput.addEventListener('blur', fetchNames);
         form.addEventListener('submit', handleFormSubmit);
-
     </script>
 
 </body>
