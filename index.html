@@ -61,7 +61,6 @@
             }
             checkboxContainer.innerHTML = '<p>Loading names...</p>';
             try {
-                // We add `?action=getNames` to tell the script what we want to do
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}`);
                 const data = await response.json();
                 if (data.success && data.names.length > 0) {
