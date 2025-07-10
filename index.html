@@ -50,8 +50,8 @@
         const submitButton = document.getElementById('submit-button');
         const financialCheckbox = document.getElementById('is-financial');
 
-        // Remember to paste your latest deployment URL here
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
+        // Remember to create a new deployment and paste the URL here
+        const APPS_SCRIPT_URL = 'PASTE_YOUR_NEW_URL_HERE';
 
         const fetchNames = async () => {
             const lot = lotInput.value.trim();
@@ -61,7 +61,8 @@
             }
             checkboxContainer.innerHTML = '<p>Loading names...</p>';
             try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?lot=${lot}`);
+                // We add `?action=getNames` to tell the script what we want to do
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}`);
                 const data = await response.json();
                 if (data.success && data.names.length > 0) {
                     checkboxContainer.innerHTML = '';
@@ -99,11 +100,37 @@
             }
 
             try {
+                // Step 1: Check if columns for today's date exist
+                statusEl.textContent = 'Checking for existing columns...';
+                const checkResponse = await fetch(`${APPS_SCRIPT_URL}?action=checkDate`);
+                const checkData = await checkResponse.json();
+                
+                let meetingName = null;
+
+                // Step 2: If columns don't exist, prompt the user for a meeting name
+                if (checkData.success && !checkData.dateExists) {
+                    meetingName = window.prompt("Columns for today's date were not found.\nPlease enter the meeting name (e.g., EGM, AGM):");
+                    if (!meetingName) { // User cancelled or entered nothing
+                        statusEl.textContent = "Submission cancelled.";
+                        submitButton.disabled = false;
+                        return;
+                    }
+                } else if (!checkData.success) {
+                    throw new Error(checkData.error);
+                }
+
+                // Step 3: Proceed with the final submission
+                statusEl.textContent = 'Submitting attendance...';
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'cors',
                     headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify({ lot: lot, names: selectedNames, financial: isFinancial })
+                    body: JSON.stringify({ 
+                        lot: lot, 
+                        names: selectedNames, 
+                        financial: isFinancial,
+                        meetingName: meetingName // Will be null if date existed, or the string if new
+                    })
                 });
                 const result = await response.json();
 
