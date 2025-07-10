@@ -15,7 +15,7 @@
         .checkbox-item { display: block; margin-bottom: 0.5rem; }
         button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; }
         button:disabled { background-color: #aaa; }
-        #status { text-align: center; margin-top: 1rem; font-weight: bold; }
+        #status { text-align: center; margin-top: 1rem; font-weight: bold; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -50,23 +50,19 @@
         const submitButton = document.getElementById('submit-button');
         const financialCheckbox = document.getElementById('is-financial');
 
-        // Remember to paste your latest Web App URL here
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
+        // PASTE YOUR NEW WEB APP URL HERE
+        const APPS_SCRIPT_URL = 'PASTE_YOUR_NEW_URL_HERE';
 
         const fetchNames = async () => {
             const lot = lotInput.value.trim();
-
             if (!lot) {
                 checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 return;
             }
-
             checkboxContainer.innerHTML = '<p>Loading names...</p>';
-            
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?lot=${lot}`);
                 const data = await response.json();
-
                 if (data.success && data.names.length > 0) {
                     checkboxContainer.innerHTML = '';
                     data.names.forEach(name => {
@@ -94,15 +90,9 @@
             const selectedCheckboxes = document.querySelectorAll('input[name="attendee"]:checked');
             const selectedNames = Array.from(selectedCheckboxes).map(cb => cb.value);
             const isFinancial = financialCheckbox.checked;
-            
-            if (!lot) {
-                statusEl.textContent = 'Please enter a Lot Number.';
-                statusEl.style.color = 'red';
-                submitButton.disabled = false;
-                return;
-            }
-            if (selectedNames.length === 0) {
-                statusEl.textContent = 'Please select at least one name.';
+
+            if (!lot || selectedNames.length === 0) {
+                statusEl.textContent = 'Please enter a Lot and select at least one name.';
                 statusEl.style.color = 'red';
                 submitButton.disabled = false;
                 return;
@@ -115,16 +105,22 @@
                     headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify({ lot: lot, names: selectedNames, financial: isFinancial })
                 });
-
                 const result = await response.json();
 
                 if (result.success) {
-                    statusEl.textContent = 'Submission successful!';
                     statusEl.style.color = 'green';
+                    const debug = result.debug;
+                    let debugMessage = `<strong>Submission Successful!</strong><br><hr>`;
+                    debugMessage += `Searched for date: ${debug.searchedDate}<br>`;
+                    debugMessage += `Found Attendance Column: ${debug.foundAttendanceCol > 0 ? debug.foundAttendanceCol : 'Not Found'}<br>`;
+                    debugMessage += `Found Name Column: ${debug.foundNameCol}<br>`;
+                    debugMessage += `Found Financial Column: ${debug.foundFinancialCol}<br>`;
+                    debugMessage += `Updated Row: ${debug.updatedRow}`;
+                    statusEl.innerHTML = debugMessage;
+                    
                     form.reset();
                     checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 } else { throw new Error(result.error); }
-
             } catch (error) {
                 console.error('Submission Error:', error);
                 statusEl.textContent = `Submission failed: ${error.message}`;
