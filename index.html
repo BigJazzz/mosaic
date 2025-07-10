@@ -46,7 +46,7 @@
         const statusEl = document.getElementById('status');
         const submitButton = document.getElementById('submit-button');
 
-        // Your new Web App URL is included here
+        // Your Web App URL
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwwDudiTC1CWG-rT83SenKoSksycaRfYVGYL8l3r_tHXyBnn_kHANBnqXkX-URAT38kUQ/exec';
 
         const fetchNames = async () => {
@@ -99,7 +99,7 @@
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
-                    mode: ''cors'',
+                    mode: 'cors', // This line is now corrected
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ names: selectedNames })
                 });
