@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v2.0");
+        console.info("Attendance Form Code - v2.1 (fetchNames debug)");
     </script>
 </head>
 <body>
@@ -195,11 +195,9 @@
             attendees.forEach(attendee => {
                 const isProxy = String(attendee.name).startsWith('Proxy - Lot');
                 const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
-                
                 let ownerRepName = '';
                 let companyName = '';
                 let rowColor = '#d4e3c1';
-                
                 if (isProxy) {
                     companyName = attendee.name;
                     rowColor = '#c1e1e3';
@@ -211,7 +209,6 @@
                 } else {
                     ownerRepName = attendee.name;
                 }
-                
                 const row = document.createElement('tr');
                 row.style.backgroundColor = rowColor;
                 row.innerHTML = `<td>${attendee.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>`;
@@ -277,7 +274,15 @@
             checkboxContainer.innerHTML = '<p>Loading names...</p>';
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}&sp=${sp}`);
-                const data = await response.json();
+                
+                // --- NEW LOGGING ---
+                console.log("Received response from server. Status:", response.status);
+                const responseText = await response.text();
+                console.log("Raw response text from server:", responseText);
+                // --- END NEW LOGGING ---
+
+                const data = JSON.parse(responseText); // Manually parse the text
+
                 if (data.success && data.names.length > 0) {
                     fetchedNames = data.names;
                     checkboxContainer.innerHTML = '';
