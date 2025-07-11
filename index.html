@@ -1,329 +1,248 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance Form</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 2rem; background-color: #f8f9fa; }
-        .container { max-width: 600px; margin: auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-        h1 { text-align: center; color: #333; margin: 0; }
-        #quorum-display { padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold; color: white; text-align: center; line-height: 1.2; }
-        #quorum-display small { font-weight: normal; font-size: 0.8em; }
-        .form-group { margin-bottom: 1rem; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        input[type="text"] { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        #checkbox-container { border: 1px solid #eee; padding: 1rem; border-radius: 4px; min-height: 50px; }
-        .checkbox-item { display: block; margin-bottom: 0.5rem; }
-        button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; }
-        button:disabled { background-color: #aaa; }
-        #status { text-align: center; margin-top: 1rem; font-weight: bold; }
-        .attendee-section { margin-top: 2rem; }
-        .attendee-section h2 { display: flex; justify-content: space-between; align-items: center;}
-        .attendee-table { width: 100%; border-collapse: collapse; }
-        .attendee-table th, .attendee-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
-        .attendee-table th { background-color: #f2f2f2; }
-        #company-rep-group, #proxy-holder-group { display: none; }
-    </style>
-    <script>
-        console.info("Attendance Form Code - v1.8");
-    </script>
-</head>
-<body>
+// --- CONFIGURATION ---
+const SOURCE_SHEET_ID = '143EspDcO0leMPNnUE_XJIs0YGVjdbVchq5SQMEut2Do'; // The static ID of the spreadsheet containing all strata tabs
+const STRATA_PLANS_SHEET_ID = '1ZVW9nVZFqJJ4cIxv6GipZ7oHN_7CryIUiV_hXFF1GI0';
+const DESTINATION_SHEET_ID = '15q4fAjDO1U_cSWEGuIdhYn2LZNkcafEYpo6zIYlRRUQ';
+const DESTINATION_TAB_NAME = 'Sheet1';
 
-    <div class="container">
-        <div class="header-container">
-            <h1>Attendance Form</h1>
-            <div id="quorum-display">Quorum: ...%</div>
-        </div>
-        <form id="attendance-form">
-            <div class="form-group">
-                <label for="lot-number">Lot Number</label>
-                <input type="text" id="lot-number" required>
-            </div>
-            <hr>
-            <div class="form-group">
-                <label>Owner/s</label>
-                <div id="checkbox-container">
-                    <p>Enter a Lot Number to see names.</p>
-                </div>
-            </div>
-            <div class="form-group" id="company-rep-group">
-                <label for="company-rep">Company Representative</label>
-                <input type="text" id="company-rep" placeholder="Enter representative's name (optional)">
-            </div>
-             <div class="form-group" id="proxy-holder-group">
-                <label for="proxy-holder-lot">Proxy Holder Lot Number</label>
-                <input type="text" id="proxy-holder-lot" placeholder="Enter lot number holding the proxy">
-            </div>
-            <div class="form-group">
-                <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
-                <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is a Proxy form?</label>
-            </div>
-            <button type="submit" id="submit-button">Submit</button>
-            <p id="status"></p>
-        </form>
+// Column indices (A=1, B=2, C=3, etc.)
+const LOT_COLUMN_SRC = 3;
+const NAME_ON_TITLE_COL = 6;
+const MAIN_CONTACT_COL = 7;
+const DEST_LOT_COLUMN = 1;
 
-        <div class="attendee-section">
-            <h2>Current Attendees <span id="person-count"></span></h2>
-            <table class="attendee-table">
-                <thead>
-                    <tr>
-                        <th>Lot</th>
-                        <th>Owner</th>
-                        <th>Company</th>
-                        <th>Delete?</th>
-                    </tr>
-                </thead>
-                <tbody id="attendee-table-body">
-                    </tbody>
-            </table>
-        </div>
-    </div>
 
-    <script>
-        const lotInput = document.getElementById('lot-number');
-        const checkboxContainer = document.getElementById('checkbox-container');
-        const form = document.getElementById('attendance-form');
-        const statusEl = document.getElementById('status');
-        const submitButton = document.getElementById('submit-button');
-        const financialCheckbox = document.getElementById('is-financial');
-        const proxyCheckbox = document.getElementById('is-proxy');
-        const quorumDisplay = document.getElementById('quorum-display');
-        const attendeeTableBody = document.getElementById('attendee-table-body');
-        const companyRepGroup = document.getElementById('company-rep-group');
-        const companyRepInput = document.getElementById('company-rep');
-        const personCountSpan = document.getElementById('person-count');
-        const proxyHolderGroup = document.getElementById('proxy-holder-group');
-        const proxyHolderLotInput = document.getElementById('proxy-holder-lot');
+/**
+ * [NEW] Dynamically finds the correct tab name within the static source spreadsheet.
+ */
+function getSourceSheetInfo(strataPlanNumber) {
+  const spreadsheet = SpreadsheetApp.openById(SOURCE_SHEET_ID);
+  const allSheets = spreadsheet.getSheets();
+  
+  for (const sheet of allSheets) {
+    const sheetName = sheet.getName();
+    // Check if the tab name starts with the strata plan number
+    if (sheetName.startsWith(strataPlanNumber)) {
+      return {
+        id: SOURCE_SHEET_ID,
+        tabName: sheetName
+      };
+    }
+  }
+  
+  return null; // No matching tab found
+}
+
+
+/**
+ * Handles all GET requests for the form.
+ */
+function doGet(e) {
+  const action = e.parameter.action || 'getNames';
+  
+  try {
+    // ACTION 1: Get the list of all Strata Plans
+    if (action === 'getStrataPlans') {
+      const cache = CacheService.getScriptCache();
+      const cachedPlans = cache.get('strataPlans');
+      if (cachedPlans) {
+        return ContentService.createTextOutput(cachedPlans)
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      const sheet = SpreadsheetApp.openById(STRATA_PLANS_SHEET_ID).getSheetByName('Strata Plan List');
+      const data = sheet.getRange("A2:B").getValues();
+      const plans = data
+        .filter(row => row[0])
+        .map(row => ({ sp: row[0], suburb: row[1] }));
+      
+      const json = JSON.stringify({ success: true, plans: plans });
+      cache.put('strataPlans', json, 21600); // Cache for 6 hours
+
+      return ContentService.createTextOutput(json)
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // All other actions require a Strata Plan number
+    const strataPlanNumber = e.parameter.sp;
+    if (!strataPlanNumber) throw new Error("Strata Plan number is required.");
+    const sourceInfo = getSourceSheetInfo(strataPlanNumber);
+    if (!sourceInfo) throw new Error(`Configuration for Strata Plan ${strataPlanNumber} not found.`);
+
+    // ACTION 2: Get names for a lot number to populate checkbox
+    if (action === 'getNames') {
+      const lotNumber = e.parameter.lot.trim();
+      const sourceSheet = SpreadsheetApp.openById(sourceInfo.id).getSheetByName(sourceInfo.tabName);
+      const lotColumnRange = sourceSheet.getRange(1, LOT_COLUMN_SRC, sourceSheet.getLastRow());
+      const textFinder = lotColumnRange.createTextFinder(lotNumber).matchEntireCell(true);
+      const foundLots = textFinder.findAll();
+      let allNames = [];
+
+      for (const lotRange of foundLots) {
+        const row = lotRange.getRow();
+        const fullNameOnTitle = sourceSheet.getRange(row, NAME_ON_TITLE_COL).getValue().toString().trim();
+        const mainContactName = sourceSheet.getRange(row, MAIN_CONTACT_COL).getValue().toString().trim();
         
-        let fetchedNames = []; // Store the names fetched for the current lot
+        let finalNameString = mainContactName;
+        const hasTitles = /\b(Mr|Mrs|Ms|Miss)\b/i.test(mainContactName);
+        const firstWord = mainContactName.split(' ')[0];
+        const firstNameIsInitial = /^[A-Z]\.?$/.test(firstWord);
+        if (hasTitles || firstNameIsInitial) finalNameString = fullNameOnTitle;
+        
+        const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(finalNameString);
+        let parsedNames = [];
+        if (isCompany) {
+          parsedNames = [finalNameString];
+        } else {
+          parsedNames = finalNameString.split(/\s+and\s+|\s*&\s*|\s*,\s*/i)
+                                 .map(name => name.trim()).filter(name => name);
+        }
+        allNames.push(...parsedNames);
+      }
+      
+      const uniqueNames = [...new Set(allNames)];
+      return ContentService.createTextOutput(JSON.stringify({ success: true, names: uniqueNames }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // Other actions use the destination sheet
+    const sheet = SpreadsheetApp.openById(DESTINATION_SHEET_ID).getSheetByName(DESTINATION_TAB_NAME);
+    const todaysDateString = Utilities.formatDate(new Date(), "Australia/Sydney", "dd/MM/yyyy");
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    
+    let attendanceCol = -1, nameCol = -1;
+    headers.forEach((header, i) => {
+      const headerText = String(header);
+      if (headerText.includes(todaysDateString)) {
+        if (!headerText.includes("Name") && !headerText.includes("Financial")) attendanceCol = i + 1;
+        else if (headerText.includes("Name")) nameCol = i + 1;
+      }
+    });
 
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
-
-        const handleDelete = async (lotNumber) => {
-            if (confirm(`Are you sure you want to delete the attendance record for Lot ${lotNumber}?`)) {
-                statusEl.textContent = `Deleting Lot ${lotNumber}...`;
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL, {
-                        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                        body: JSON.stringify({ action: 'delete', lot: lotNumber })
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                        statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-                        fetchInitialData();
-                    } else { throw new Error(result.error); }
-                } catch (error) {
-                    console.error('Deletion Error:', error);
-                    statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
-                }
+    // ACTION 3: Get the list of current attendees
+    if (action === 'getAttendees') {
+      let attendees = [], personCount = 0;
+      if (attendanceCol > 0 && nameCol > 0) {
+        const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+        for (let i = 0; i < data.length; i++) {
+          const lot = data[i][DEST_LOT_COLUMN - 1];
+          if (!lot) continue;
+          
+          const attendanceStatus = data[i][attendanceCol - 1];
+          const nameData = String(data[i][nameCol - 1]);
+          if (attendanceStatus === 'Y') {
+            attendees.push({ lot: lot, name: nameData });
+            if (!nameData.startsWith("Proxy - Lot")) {
+              personCount += (/\b(P\/L|Pty Ltd|Limited)\b/i.test(nameData)) ? 1 : nameData.split(',').length;
             }
-        };
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, attendees: attendees, personCount: personCount }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
-        const renderAttendeeTable = (attendees, personCount) => {
-            attendeeTableBody.innerHTML = '';
-            personCountSpan.textContent = `(${personCount || 0} people)`;
-            if (!attendees || attendees.length === 0) {
-                attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
-                return;
-            }
-            attendees.sort((a, b) => a.lot - b.lot);
+    // ACTION 4: Get the quorum count
+    if (action === 'getQuorum') {
+      const lotColumnValues = sheet.getRange("A2:A").getValues();
+      const totalLots = lotColumnValues.filter(row => String(row[0]).trim() !== '').length;
+      let attendanceCount = 0;
+      if (attendanceCol > 0) {
+        const attendanceData = sheet.getRange(2, attendanceCol, sheet.getMaxRows()).getValues();
+        attendanceCount = attendanceData.filter(cell => String(cell[0]).trim() !== '').length;
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, attendanceCount: attendanceCount, totalLots: totalLots }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
-            attendees.forEach(attendee => {
-                const isProxy = String(attendee.name).startsWith('Proxy - Lot');
-                const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
-                const ownerName = isCompany || isProxy ? '' : attendee.name;
-                const companyName = isCompany || isProxy ? attendee.name : '';
-                
-                let rowColor = '#d4e3c1'; // Owner green
-                if (isProxy) rowColor = '#c1e1e3'; // Proxy blue/teal
-                else if (isCompany) rowColor = '#cbc1e3'; // Company purple
+    // ACTION 5: Check if date columns exist
+    if (action === 'checkDate') {
+      const dateExists = headers.some(header => String(header || '').includes(todaysDateString));
+      return ContentService.createTextOutput(JSON.stringify({ success: true, dateExists: dateExists }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
-                const row = document.createElement('tr');
-                row.style.backgroundColor = rowColor;
-                row.innerHTML = `
-                    <td>${attendee.lot}</td>
-                    <td>${ownerName}</td>
-                    <td>${companyName}</td>
-                    <td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>
-                `;
-                attendeeTableBody.appendChild(row);
-            });
-        };
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
 
-        const updateQuorumDisplay = (count = 0, total = 0) => {
-            const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
-            if (percentage >= 25) {
-                quorumDisplay.style.backgroundColor = '#28a745';
-            } else {
-                quorumDisplay.style.backgroundColor = '#dc3545';
-            }
-        };
+/**
+ * Handles POST requests for submitting and deleting attendance.
+ */
+function doPost(e) {
+  try {
+    const submissionData = JSON.parse(e.postData.contents);
+    const strataPlanNumber = submissionData.sp;
+    if (!strataPlanNumber) throw new Error("Strata Plan number is required for submissions.");
 
-        const fetchAttendees = async () => {
-            try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees`);
-                const data = await response.json();
-                if (data.success) {
-                    renderAttendeeTable(data.attendees, data.personCount);
-                }
-            } catch (error) { console.error("Could not fetch attendee list:", error); }
-        };
+    const action = submissionData.action || 'submit';
+    const sheet = SpreadsheetApp.openById(DESTINATION_SHEET_ID).getSheetByName(DESTINATION_TAB_NAME);
+    const lotNumber = submissionData.lot;
+    const lotColumnRange = sheet.getRange(1, DEST_LOT_COLUMN, sheet.getLastRow());
+    const textFinder = lotColumnRange.createTextFinder(lotNumber).matchEntireCell(true);
+    const foundLot = textFinder.findNext();
 
-        const fetchInitialData = async () => {
-            quorumDisplay.textContent = 'Loading...';
-            try {
-                const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum`);
-                const quorumData = await quorumResponse.json();
-                if (quorumData.success) {
-                    updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
-                } else { updateQuorumDisplay(); }
-            } catch (error) {
-                console.error("Could not fetch initial quorum:", error);
-                updateQuorumDisplay();
-            }
-            await fetchAttendees();
-        };
+    if (!foundLot) throw new Error(`Lot Number "${lotNumber}" not found in the destination sheet.`);
+    const targetRow = foundLot.getRow();
 
-        const fetchNames = async () => {
-            const lot = lotInput.value.trim();
-            companyRepGroup.style.display = 'none';
-            companyRepInput.value = '';
-            fetchedNames = []; // Reset stored names
-            if (!lot) {
-                checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
-                return;
-            }
-            checkboxContainer.innerHTML = '<p>Loading names...</p>';
-            try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}`);
-                const data = await response.json();
-                if (data.success && data.names.length > 0) {
-                    fetchedNames = data.names; // Store names for later validation
-                    checkboxContainer.innerHTML = '';
-                    data.names.forEach(name => {
-                        const div = document.createElement('div');
-                        div.className = 'checkbox-item';
-                        div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
-                        if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
-                            companyRepGroup.style.display = 'block';
-                        }
-                    });
-                } else if (data.success) {
-                    checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot Number.</p>';
-                } else { throw new Error(data.error); }
-            } catch (error) {
-                console.error('Error fetching names:', error);
-                checkboxContainer.innerHTML = '<p style="color: red;">Error fetching names. Please try again.</p>';
-            }
-        };
+    const dateString = Utilities.formatDate(new Date(), "Australia/Sydney", "dd/MM/yyyy");
+    let nameCol, financialCol, attendanceCol;
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn() + 3).getValues()[0];
+    headers.forEach((header, i) => {
+      const headerText = String(header);
+      if (headerText.includes(dateString)) {
+        if (headerText.includes("Name")) nameCol = i + 1;
+        else if (headerText.includes("Financial")) financialCol = i + 1;
+        else attendanceCol = i + 1;
+      }
+    });
 
-        const handleFormSubmit = async (event) => {
-            event.preventDefault();
-            submitButton.disabled = true;
-            statusEl.textContent = 'Submitting...';
-            statusEl.style.color = '#333';
+    if (action === 'delete') {
+      if (attendanceCol) sheet.getRange(targetRow, attendanceCol).clearContent();
+      if (nameCol) sheet.getRange(targetRow, nameCol).clearContent();
+      if (financialCol) sheet.getRange(targetRow, financialCol).clearContent();
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Deletion successful!' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    const { names, financial, meetingName, companyRep, proxyHolderLot } = submissionData;
+    let nameToStore = proxyHolderLot ? `Proxy - Lot ${proxyHolderLot}` : (companyRep ? `${names[0]} - ${companyRep}` : names.join(', '));
+    
+    const nameHeader = `${dateString} Name`;
+    const financialHeader = `${dateString} Financial`;
+    let attendanceHeader = meetingName ? `${dateString} ${meetingName.trim()}` : "";
+    
+    if (attendanceHeader && !attendanceCol) {
+      attendanceCol = sheet.getLastColumn() + 1;
+      sheet.getRange(1, attendanceCol).setValue(attendanceHeader);
+    }
+    if (!nameCol) {
+      nameCol = sheet.getLastColumn() + 1;
+      sheet.getRange(1, nameCol).setValue(nameHeader);
+    }
+    if (!financialCol) {
+      financialCol = sheet.getLastColumn() + 1;
+      sheet.getRange(1, financialCol).setValue(financialHeader);
+    }
+    
+    if (attendanceCol > 0) sheet.getRange(targetRow, attendanceCol).setValue('Y');
+    if (nameCol > 0) sheet.getRange(targetRow, nameCol).setValue(nameToStore);
+    if (financialCol > 0) sheet.getRange(targetRow, financialCol).setValue(financial ? 'Yes' : 'No');
+    
+    SpreadsheetApp.flush();
+    const totalLots = sheet.getRange("A2:A").getValues().filter(row => String(row[0]).trim() !== '').length;
+    const attendanceData = sheet.getRange(2, attendanceCol, sheet.getMaxRows()).getValues();
+    const attendanceCount = attendanceData.filter(cell => String(cell[0]).trim() !== '').length;
 
-            const lot = lotInput.value.trim();
-            let selectedNames = Array.from(document.querySelectorAll('input[name="attendee"]:checked')).map(cb => cb.value);
-            const isFinancial = financialCheckbox.checked;
-            const isProxy = proxyCheckbox.checked;
-            const companyRep = companyRepInput.value.trim();
-            const proxyHolderLot = proxyHolderLotInput.value.trim();
+    return ContentService.createTextOutput(JSON.stringify({ 
+        success: true, message: 'Submission successful!',
+        attendanceCount: attendanceCount, totalLots: totalLots
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
 
-            if (isProxy) {
-                if (!proxyHolderLot) {
-                    statusEl.textContent = 'Please enter the Lot Number holding the proxy.';
-                    statusEl.style.color = 'red';
-                    submitButton.disabled = false;
-                    return;
-                }
-                selectedNames = [];
-            } else {
-                // If no owner is checked, check if it's a company lot
-                if (selectedNames.length === 0 && fetchedNames.length > 0) {
-                    const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0]);
-                    if (isCompany) {
-                        selectedNames = [fetchedNames[0]]; // Auto-select the company name
-                    }
-                }
-                // Final check
-                if (selectedNames.length === 0) {
-                    statusEl.textContent = 'Please select at least one owner.';
-                    statusEl.style.color = 'red';
-                    submitButton.disabled = false;
-                    return;
-                }
-            }
-
-            try {
-                statusEl.textContent = 'Checking for existing columns...';
-                const checkResponse = await fetch(`${APPS_SCRIPT_URL}?action=checkDate`);
-                const checkData = await checkResponse.json();
-                
-                let meetingName = null;
-                if (checkData.success && !checkData.dateExists) {
-                    meetingName = window.prompt("Columns for today's date were not found.\nPlease enter the meeting name (e.g., EGM, AGM):");
-                    if (!meetingName) {
-                        statusEl.textContent = "Submission cancelled.";
-                        submitButton.disabled = false;
-                        return;
-                    }
-                } else if (!checkData.success) { throw new Error(checkData.error); }
-
-                statusEl.textContent = 'Submitting attendance...';
-                const response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify({ 
-                        action: 'submit', lot: lot, names: selectedNames, 
-                        financial: isFinancial, proxyHolderLot: proxyHolderLot, 
-                        meetingName: meetingName, companyRep: companyRep 
-                    })
-                });
-                const result = await response.json();
-
-                if (result.success) {
-                    statusEl.textContent = 'Submission successful!';
-                    statusEl.style.color = 'green';
-                    updateQuorumDisplay(result.attendanceCount, result.totalLots);
-                    fetchAttendees();
-                    form.reset();
-                    companyRepGroup.style.display = 'none';
-                    proxyHolderGroup.style.display = 'none';
-                    checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
-                } else { throw new Error(result.error); }
-            } catch (error) {
-                console.error('Submission Error:', error);
-                statusEl.textContent = `Submission failed: ${error.message}`;
-                statusEl.style.color = 'red';
-            } finally {
-                submitButton.disabled = false;
-            }
-        };
-
-        proxyCheckbox.addEventListener('change', () => {
-            if (proxyCheckbox.checked) {
-                proxyHolderGroup.style.display = 'block';
-                checkboxContainer.style.display = 'none';
-                companyRepGroup.style.display = 'none';
-            } else {
-                proxyHolderGroup.style.display = 'none';
-                checkboxContainer.style.display = 'block';
-                // Re-check if company rep box should be shown
-                if (fetchedNames.length > 0 && /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0])) {
-                    companyRepGroup.style.display = 'block';
-                }
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', fetchInitialData);
-        lotInput.addEventListener('blur', fetchNames);
-        form.addEventListener('submit', handleFormSubmit);
-        setInterval(fetchAttendees, 90000);
-    </script>
-
-</body>
-</html>
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
