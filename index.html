@@ -19,14 +19,16 @@
         button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; }
         button:disabled { background-color: #aaa; }
         #status { text-align: center; margin-top: 1rem; font-weight: bold; }
-        /* Table Styles */
+        /* Table and new input styles */
         .attendee-section { margin-top: 2rem; }
+        .attendee-section h2 { display: flex; justify-content: space-between; align-items: center;}
         .attendee-table { width: 100%; border-collapse: collapse; }
         .attendee-table th, .attendee-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
         .attendee-table th { background-color: #f2f2f2; }
+        #company-rep-group { display: none; } /* Hidden by default */
     </style>
     <script>
-        console.info("Attendance Form Code - v1.3");
+        console.info("Attendance Form Code - v1.4");
     </script>
 </head>
 <body>
@@ -48,6 +50,10 @@
                     <p>Enter a Lot Number to see names.</p>
                 </div>
             </div>
+            <div class="form-group" id="company-rep-group">
+                <label for="company-rep">Company Representative</label>
+                <input type="text" id="company-rep" placeholder="Enter representative's name">
+            </div>
             <div class="form-group">
                 <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
                 <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is a Proxy form?</label>
@@ -57,7 +63,7 @@
         </form>
 
         <div class="attendee-section">
-            <h2>Current Attendees</h2>
+            <h2>Current Attendees <span id="person-count"></span></h2>
             <table class="attendee-table">
                 <thead>
                     <tr>
@@ -83,12 +89,13 @@
         const proxyCheckbox = document.getElementById('is-proxy');
         const quorumDisplay = document.getElementById('quorum-display');
         const attendeeTableBody = document.getElementById('attendee-table-body');
+        const companyRepGroup = document.getElementById('company-rep-group');
+        const companyRepInput = document.getElementById('company-rep');
+        const personCountSpan = document.getElementById('person-count');
 
-        // This is the persistent URL for your script deployment
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
         const updateQuorumDisplay = (count = 0, total = 0) => {
-            console.log(`[LOG] Updating quorum display with Count: ${count}, Total: ${total}`);
             const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
             quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
             if (percentage >= 25) {
@@ -98,14 +105,15 @@
             }
         };
 
-        const renderAttendeeTable = (attendees) => {
-            console.log(`[LOG] Rendering attendee table with ${attendees ? attendees.length : 0} attendees.`);
+        const renderAttendeeTable = (attendees, personCount) => {
             attendeeTableBody.innerHTML = '';
+            personCountSpan.textContent = `(${personCount || 0} people)`;
             if (!attendees || attendees.length === 0) {
                 attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
                 return;
             }
             attendees.sort((a, b) => a.lot - b.lot);
+
             attendees.forEach(attendee => {
                 const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
                 const ownerName = isCompany ? '' : attendee.name;
@@ -122,13 +130,11 @@
         };
 
         const fetchAttendees = async () => {
-            console.log("[LOG] Fetching current attendee list...");
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees`);
                 const data = await response.json();
-                console.log("[LOG] Received attendee data:", data);
                 if (data.success) {
-                    renderAttendeeTable(data.attendees);
+                    renderAttendeeTable(data.attendees, data.personCount);
                 }
             } catch (error) {
                 console.error("Could not fetch attendee list:", error);
@@ -136,12 +142,10 @@
         };
 
         const fetchInitialData = async () => {
-            console.log("[LOG] Fetching initial page data (Quorum and Attendees)...");
             quorumDisplay.textContent = 'Loading...';
             try {
                 const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum`);
                 const quorumData = await quorumResponse.json();
-                console.log("[LOG] Received quorum data:", quorumData);
                 if (quorumData.success) {
                     updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
                 } else {
@@ -152,18 +156,21 @@
                 updateQuorumDisplay();
             }
             await fetchAttendees();
-            console.log("[LOG] Initial data load complete.");
         };
 
         const fetchNames = async () => {
             const lot = lotInput.value.trim();
-            console.log(`[LOG] Fetching names for Lot: ${lot}`);
-            if (!lot) { return; }
+            companyRepGroup.style.display = 'none'; // Hide by default on new fetch
+            companyRepInput.value = '';
+
+            if (!lot) {
+                checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
+                return;
+            }
             checkboxContainer.innerHTML = '<p>Loading names...</p>';
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}`);
                 const data = await response.json();
-                console.log("[LOG] Received names data:", data);
                 if (data.success && data.names.length > 0) {
                     checkboxContainer.innerHTML = '';
                     data.names.forEach(name => {
@@ -171,6 +178,11 @@
                         div.className = 'checkbox-item';
                         div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
                         checkboxContainer.appendChild(div);
+
+                        // If any name is a company, show the rep input field
+                        if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
+                            companyRepGroup.style.display = 'block';
+                        }
                     });
                 } else if (data.success) {
                     checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot Number.</p>';
@@ -183,77 +195,73 @@
 
         const handleFormSubmit = async (event) => {
             event.preventDefault();
-            console.log("[LOG] Submit button clicked. Starting submission process.");
-            
+            submitButton.disabled = true;
+            statusEl.textContent = 'Submitting...';
+            statusEl.style.color = '#333';
+
             const lot = lotInput.value.trim();
             const selectedCheckboxes = document.querySelectorAll('input[name="attendee"]:checked');
             const selectedNames = Array.from(selectedCheckboxes).map(cb => cb.value);
             const isFinancial = financialCheckbox.checked;
             const isProxy = proxyCheckbox.checked;
+            const companyRep = companyRepInput.value.trim();
 
             if (!lot || selectedNames.length === 0) {
                 statusEl.textContent = 'Please enter a Lot and select at least one name.';
                 statusEl.style.color = 'red';
+                submitButton.disabled = false;
                 return;
             }
-            
-            submitButton.disabled = true;
-            statusEl.textContent = 'Submitting...';
-            statusEl.style.color = '#333';
 
             try {
-                console.log("[LOG] Step 1: Checking if date columns exist.");
                 statusEl.textContent = 'Checking for existing columns...';
                 const checkResponse = await fetch(`${APPS_SCRIPT_URL}?action=checkDate`);
                 const checkData = await checkResponse.json();
-                console.log("[LOG] Received date check response:", checkData);
                 
                 let meetingName = null;
                 if (checkData.success && !checkData.dateExists) {
-                    console.log("[LOG] Date columns not found. Prompting for meeting name.");
                     meetingName = window.prompt("Columns for today's date were not found.\nPlease enter the meeting name (e.g., EGM, AGM):");
                     if (!meetingName) {
                         statusEl.textContent = "Submission cancelled.";
                         submitButton.disabled = false;
-                        console.log("[LOG] User cancelled meeting name prompt.");
                         return;
                     }
-                    console.log(`[LOG] User entered meeting name: ${meetingName}`);
-                } else if (!checkData.success) {
-                    throw new Error(checkData.error);
-                }
+                } else if (!checkData.success) { throw new Error(checkData.error); }
 
-                const submissionPayload = { lot: lot, names: selectedNames, financial: isFinancial, proxy: isProxy, meetingName: meetingName };
-                console.log("[LOG] Step 2: Submitting attendance with payload:", submissionPayload);
                 statusEl.textContent = 'Submitting attendance...';
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'cors',
                     headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(submissionPayload)
+                    body: JSON.stringify({ 
+                        lot: lot, 
+                        names: selectedNames, 
+                        financial: isFinancial,
+                        proxy: isProxy,
+                        meetingName: meetingName,
+                        companyRep: companyRep // Send the rep name
+                    })
                 });
                 const result = await response.json();
-                console.log("[LOG] Received submission response:", result);
 
                 if (result.success) {
                     statusEl.textContent = 'Submission successful!';
                     statusEl.style.color = 'green';
-                    console.log("[LOG] Submission successful. Updating quorum and attendee list.");
                     updateQuorumDisplay(result.attendanceCount, result.totalLots);
                     fetchAttendees();
                     form.reset();
+                    companyRepGroup.style.display = 'none'; // Hide after successful submission
                     checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 } else { throw new Error(result.error); }
             } catch (error) {
                 console.error('Submission Error:', error);
                 statusEl.textContent = `Submission failed: ${error.message}`;
+                statusEl.style.color = 'red';
             } finally {
                 submitButton.disabled = false;
-                console.log("[LOG] Submission process finished.");
             }
         };
 
-        // --- Event Listeners and Timers ---
         document.addEventListener('DOMContentLoaded', fetchInitialData);
         lotInput.addEventListener('blur', fetchNames);
         form.addEventListener('submit', handleFormSubmit);
