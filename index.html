@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v1.10 (with caching)");
+        console.info("Attendance Form Code - v1.11 (cache fix)");
     </script>
 </head>
 <body>
@@ -145,18 +145,16 @@
         const populateStrataPlans = async () => {
             const cachedPlansJSON = getCookie('strataPlanList');
             if (cachedPlansJSON) {
-                console.log("Populating Strata Plans from cookie cache.");
                 renderStrataPlans(JSON.parse(cachedPlansJSON).plans);
                 return;
             }
 
-            console.log("No cache found. Fetching Strata Plans from script.");
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
                 const data = await response.json();
                 if (data.success) {
-                    setCookie('strataPlanList', JSON.stringify(data), 0.25); // Cache for 6 hours
-                    renderStrataPlans(data.plans);
+                    setCookie('strataPlanList', JSON.stringify(data), 0.25);
+                    renderStrataPlans(data.plans); // This line was added to render on first fetch
                 }
             } catch (error) {
                 console.error("Could not fetch strata plans:", error);
@@ -387,7 +385,7 @@
         });
 
         strataPlanSelect.addEventListener('change', (e) => {
-            setCookie('selectedSP', e.target.value, 0.25); // Set cookie for 6 hours
+            setCookie('selectedSP', e.target.value, 0.25);
             fetchInitialData();
         });
 
