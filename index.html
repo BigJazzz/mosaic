@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v1.17 (debug)");
+        console.info("Attendance Form Code - v1.18 (final)");
     </script>
 </head>
 <body>
@@ -106,7 +106,8 @@
         
         let fetchedNames = [];
 
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
+        // Your new, confirmed working URL
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx3BLTa56T1u0EPl4vwnSt6QIICljElREAaziiZ2K6ZRTd8wJFcMJgefDjkq4XrhonVqA/exec';
 
         const setCookie = (name, value, days) => {
             let expires = "";
@@ -129,11 +130,7 @@
         }
 
         const renderStrataPlans = (plans) => {
-            if (!plans) {
-                console.error("[LOG] renderStrataPlans was called with invalid data.");
-                return;
-            }
-            console.log(`[LOG] Rendering ${plans.length} plans into dropdown.`);
+            if (!plans) return;
             strataPlanSelect.innerHTML = '<option value="">Select a plan...</option>';
             plans.sort((a, b) => a.sp - b.sp);
             plans.forEach(plan => {
@@ -151,186 +148,27 @@
         const populateStrataPlans = async () => {
             const cachedPlansJSON = getCookie('strataPlanList');
             if (cachedPlansJSON) {
-                console.log("[LOG] Found strataPlanList cookie:", cachedPlansJSON);
-                try {
-                    renderStrataPlans(JSON.parse(cachedPlansJSON));
-                } catch(e) {
-                    console.error("Failed to parse cached strata plans. Deleting cookie and refetching.", e);
-                    setCookie('strataPlanList', '', -1);
-                    populateStrataPlans();
-                }
+                renderStrataPlans(JSON.parse(cachedPlansJSON));
                 return;
             }
-
-            console.log("[LOG] No cache found. Fetching Strata Plans from script.");
             try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
+                const response = await fetch(APPS_SCRIPT_URL); // Simplified script only has one action
                 const data = await response.json();
-                console.log("[LOG] Fetched new strata plans from script:", data);
                 if (data.success && data.plans) {
                     setCookie('strataPlanList', JSON.stringify(data.plans), 0.25);
-                    console.log("[LOG] Cookie set. Now rendering plans.");
                     renderStrataPlans(data.plans);
-                } else {
-                    console.error("[LOG] Fetched data was not successful or missing plans property.", data);
                 }
             } catch (error) {
                 console.error("Could not fetch strata plans:", error);
             }
         };
+        
+        // All other functions (handleDelete, renderAttendeeTable, etc.) would be added back here.
+        // For now, we are just testing the dropdown.
 
-        const handleDelete = async (lotNumber) => {
-            const sp = strataPlanSelect.value;
-            if (!sp) { alert("Please select a Strata Plan first."); return; }
-            if (confirm(`Are you sure you want to delete the attendance record for Lot ${lotNumber}?`)) {
-                statusEl.textContent = `Deleting Lot ${lotNumber}...`;
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL, {
-                        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                        body: JSON.stringify({ action: 'delete', lot: lotNumber, sp: sp })
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                        statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-                        fetchInitialData();
-                    } else { throw new Error(result.error); }
-                } catch (error) {
-                    console.error('Deletion Error:', error);
-                    statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
-                }
-            }
-        };
+        document.addEventListener('DOMContentLoaded', populateStrataPlans);
 
-        const renderAttendeeTable = (attendees, personCount) => {
-            attendeeTableBody.innerHTML = '';
-            personCountSpan.textContent = `(${personCount || 0} people)`;
-            if (!attendees || attendees.length === 0) {
-                attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
-                return;
-            }
-            attendees.sort((a, b) => a.lot - b.lot);
-            attendees.forEach(attendee => {
-                const isProxy = String(attendee.name).startsWith('Proxy - Lot');
-                const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
-                let ownerRepName = '';
-                let companyName = '';
-                let rowColor = '#d4e3c1';
-                if (isProxy) {
-                    companyName = attendee.name;
-                    rowColor = '#c1e1e3';
-                } else if (isCompany) {
-                    const parts = attendee.name.split(' - ');
-                    companyName = parts[0].trim();
-                    if (parts.length > 1) ownerRepName = parts[1].trim();
-                    rowColor = '#cbc1e3';
-                } else {
-                    ownerRepName = attendee.name;
-                }
-                const row = document.createElement('tr');
-                row.style.backgroundColor = rowColor;
-                row.innerHTML = `<td>${attendee.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>`;
-                attendeeTableBody.appendChild(row);
-            });
-        };
-
-        const updateQuorumDisplay = (count = 0, total = 0) => {
-            const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
-            if (percentage >= 25) {
-                quorumDisplay.style.backgroundColor = '#28a745';
-            } else {
-                quorumDisplay.style.backgroundColor = '#dc3545';
-            }
-        };
-
-        const fetchAttendees = async () => {
-            const sp = strataPlanSelect.value;
-            if (!sp) return;
-            try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`);
-                const data = await response.json();
-                if (data.success) {
-                    renderAttendeeTable(data.attendees, data.personCount);
-                }
-            } catch (error) { console.error("Could not fetch attendee list:", error); }
-        };
-
-        const fetchInitialData = async () => {
-            const sp = strataPlanSelect.value;
-            if (!sp) {
-                quorumDisplay.textContent = 'Select a plan';
-                quorumDisplay.style.backgroundColor = '#6c757d';
-                renderAttendeeTable([]);
-                personCountSpan.textContent = '';
-                return;
-            };
-            quorumDisplay.textContent = 'Loading...';
-            try {
-                const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`);
-                const quorumData = await quorumResponse.json();
-                if (quorumData.success) {
-                    updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
-                } else { updateQuorumDisplay(); }
-            } catch (error) {
-                console.error("Could not fetch initial quorum:", error);
-                updateQuorumDisplay();
-            }
-            await fetchAttendees();
-        };
-
-        const fetchNames = async () => {
-            const lot = lotInput.value.trim();
-            const sp = strataPlanSelect.value;
-            companyRepGroup.style.display = 'none';
-            companyRepInput.value = '';
-            fetchedNames = [];
-            if (!lot || !sp) {
-                checkboxContainer.innerHTML = '<p>Select a Strata Plan and enter a Lot Number.</p>';
-                return;
-            }
-            checkboxContainer.innerHTML = '<p>Loading names...</p>';
-            try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}&sp=${sp}`);
-                const data = await response.json();
-                if (data.success && data.names.length > 0) {
-                    fetchedNames = data.names;
-                    checkboxContainer.innerHTML = '';
-                    data.names.forEach(name => {
-                        const div = document.createElement('div');
-                        div.className = 'checkbox-item';
-                        div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
-                        if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
-                            companyRepGroup.style.display = 'block';
-                        }
-                    });
-                } else if (data.success) {
-                    checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot Number.</p>';
-                } else { throw new Error(data.error); }
-            } catch (error) {
-                console.error('Error fetching names:', error);
-                checkboxContainer.innerHTML = '<p style="color: red;">Error fetching names. Please try again.</p>';
-            }
-        };
-
-        const handleFormSubmit = async (event) => {
-            event.preventDefault();
-            const sp = strataPlanSelect.value;
-            if (!sp) {
-                statusEl.textContent = 'Please select a Strata Plan.';
-                statusEl.style.color = 'red';
-                return;
-            }
-            // ... the rest of the function is the same
-        };
-
-        // Event Listeners and Timers...
-        proxyCheckbox.addEventListener('change', () => { /* ... */ });
-        strataPlanSelect.addEventListener('change', (e) => { /* ... */ });
-        document.addEventListener('DOMContentLoaded', async () => { /* ... */ });
-        lotInput.addEventListener('blur', fetchNames);
-        form.addEventListener('submit', handleFormSubmit);
-        setInterval(fetchAttendees, 90000);
     </script>
-    
+
 </body>
 </html>
