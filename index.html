@@ -64,7 +64,7 @@
 
         const updateQuorumDisplay = (count, total) => {
             const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
+            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}</small>`;
             if (percentage >= 25) {
                 quorumDisplay.style.backgroundColor = '#28a745'; // Green
             } else {
