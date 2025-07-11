@@ -19,16 +19,15 @@
         button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; }
         button:disabled { background-color: #aaa; }
         #status { text-align: center; margin-top: 1rem; font-weight: bold; }
-        /* Table and new input styles */
         .attendee-section { margin-top: 2rem; }
         .attendee-section h2 { display: flex; justify-content: space-between; align-items: center;}
         .attendee-table { width: 100%; border-collapse: collapse; }
         .attendee-table th, .attendee-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
         .attendee-table th { background-color: #f2f2f2; }
-        #company-rep-group { display: none; } /* Hidden by default */
+        #company-rep-group, #proxy-holder-group { display: none; } /* Hidden by default */
     </style>
     <script>
-        console.info("Attendance Form Code - v1.5");
+        console.info("Attendance Form Code - v1.7");
     </script>
 </head>
 <body>
@@ -45,14 +44,18 @@
             </div>
             <hr>
             <div class="form-group">
-                <label>Associated Names (select all present)</label>
+                <label>Owner/s</label>
                 <div id="checkbox-container">
                     <p>Enter a Lot Number to see names.</p>
                 </div>
             </div>
             <div class="form-group" id="company-rep-group">
                 <label for="company-rep">Company Representative</label>
-                <input type="text" id="company-rep" placeholder="Enter representative's name">
+                <input type="text" id="company-rep" placeholder="Enter representative's name (optional)">
+            </div>
+             <div class="form-group" id="proxy-holder-group">
+                <label for="proxy-holder-lot">Proxy Holder Lot Number</label>
+                <input type="text" id="proxy-holder-lot" placeholder="Enter lot number holding the proxy">
             </div>
             <div class="form-group">
                 <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
@@ -70,7 +73,6 @@
                         <th>Lot</th>
                         <th>Owner</th>
                         <th>Company</th>
-                        <th>Status</th>
                         <th>Delete?</th>
                     </tr>
                 </thead>
@@ -93,6 +95,8 @@
         const companyRepGroup = document.getElementById('company-rep-group');
         const companyRepInput = document.getElementById('company-rep');
         const personCountSpan = document.getElementById('person-count');
+        const proxyHolderGroup = document.getElementById('proxy-holder-group');
+        const proxyHolderLotInput = document.getElementById('proxy-holder-lot');
 
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
@@ -101,18 +105,14 @@
                 statusEl.textContent = `Deleting Lot ${lotNumber}...`;
                 try {
                     const response = await fetch(APPS_SCRIPT_URL, {
-                        method: 'POST',
-                        mode: 'cors',
-                        headers: { 'Content-Type': 'text/plain' },
+                        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
                         body: JSON.stringify({ action: 'delete', lot: lotNumber })
                     });
                     const result = await response.json();
                     if (result.success) {
                         statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-                        fetchInitialData(); // Refresh all data
-                    } else {
-                        throw new Error(result.error);
-                    }
+                        fetchInitialData();
+                    } else { throw new Error(result.error); }
                 } catch (error) {
                     console.error('Deletion Error:', error);
                     statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
@@ -124,19 +124,20 @@
             attendeeTableBody.innerHTML = '';
             personCountSpan.textContent = `(${personCount || 0} people)`;
             if (!attendees || attendees.length === 0) {
-                attendeeTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No attendees yet.</td></tr>`;
+                attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
                 return;
             }
             attendees.sort((a, b) => a.lot - b.lot);
 
             attendees.forEach(attendee => {
-                const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
-                const ownerName = isCompany ? '' : attendee.name;
-                const companyName = isCompany ? attendee.name : '';
-                const statusText = attendee.status === 'Y' ? 'In Person' : 'Proxy';
-                let rowColor = '#d4e3c1';
-                if (attendee.status === 'Proxy') rowColor = '#c1e1e3';
-                else if (isCompany) rowColor = '#cbc1e3';
+                const isProxy = String(attendee.name).startsWith('Proxy - Lot');
+                const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
+                const ownerName = isCompany || isProxy ? '' : attendee.name;
+                const companyName = isCompany || isProxy ? attendee.name : '';
+                
+                let rowColor = '#d4e3c1'; // Owner green
+                if (isProxy) rowColor = '#c1e1e3'; // Proxy blue/teal
+                else if (isCompany) rowColor = '#cbc1e3'; // Company purple
 
                 const row = document.createElement('tr');
                 row.style.backgroundColor = rowColor;
@@ -144,7 +145,6 @@
                     <td>${attendee.lot}</td>
                     <td>${ownerName}</td>
                     <td>${companyName}</td>
-                    <td>${statusText}</td>
                     <td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>
                 `;
                 attendeeTableBody.appendChild(row);
@@ -168,9 +168,7 @@
                 if (data.success) {
                     renderAttendeeTable(data.attendees, data.personCount);
                 }
-            } catch (error) {
-                console.error("Could not fetch attendee list:", error);
-            }
+            } catch (error) { console.error("Could not fetch attendee list:", error); }
         };
 
         const fetchInitialData = async () => {
@@ -180,9 +178,7 @@
                 const quorumData = await quorumResponse.json();
                 if (quorumData.success) {
                     updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
-                } else {
-                    updateQuorumDisplay();
-                }
+                } else { updateQuorumDisplay(); }
             } catch (error) {
                 console.error("Could not fetch initial quorum:", error);
                 updateQuorumDisplay();
@@ -228,17 +224,37 @@
             statusEl.style.color = '#333';
 
             const lot = lotInput.value.trim();
-            const selectedCheckboxes = document.querySelectorAll('input[name="attendee"]:checked');
-            const selectedNames = Array.from(selectedCheckboxes).map(cb => cb.value);
+            let selectedNames = Array.from(document.querySelectorAll('input[name="attendee"]:checked')).map(cb => cb.value);
             const isFinancial = financialCheckbox.checked;
             const isProxy = proxyCheckbox.checked;
             const companyRep = companyRepInput.value.trim();
+            const proxyHolderLot = proxyHolderLotInput.value.trim();
 
-            if (!lot || selectedNames.length === 0) {
-                statusEl.textContent = 'Please enter a Lot and select at least one name.';
-                statusEl.style.color = 'red';
-                submitButton.disabled = false;
-                return;
+            if (isProxy) {
+                if (!proxyHolderLot) {
+                    statusEl.textContent = 'Please enter the Lot Number holding the proxy.';
+                    statusEl.style.color = 'red';
+                    submitButton.disabled = false;
+                    return;
+                }
+                selectedNames = []; // Clear selected names for a proxy vote
+            } else {
+                if (selectedNames.length === 0) {
+                    const availableCheckboxes = document.querySelectorAll('input[name="attendee"]');
+                    if (availableCheckboxes.length > 0) {
+                        const potentialName = availableCheckboxes[0].value;
+                        const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(potentialName);
+                        if (isCompany) {
+                            selectedNames = [potentialName];
+                        }
+                    }
+                }
+                if (selectedNames.length === 0) {
+                    statusEl.textContent = 'Please select at least one owner.';
+                    statusEl.style.color = 'red';
+                    submitButton.disabled = false;
+                    return;
+                }
             }
 
             try {
@@ -258,17 +274,11 @@
 
                 statusEl.textContent = 'Submitting attendance...';
                 const response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'text/plain' },
+                    method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify({ 
-                        action: 'submit',
-                        lot: lot, 
-                        names: selectedNames, 
-                        financial: isFinancial,
-                        proxy: isProxy,
-                        meetingName: meetingName,
-                        companyRep: companyRep
+                        action: 'submit', lot: lot, names: selectedNames, 
+                        financial: isFinancial, proxyHolderLot: proxyHolderLot, 
+                        meetingName: meetingName, companyRep: companyRep 
                     })
                 });
                 const result = await response.json();
@@ -280,6 +290,7 @@
                     fetchAttendees();
                     form.reset();
                     companyRepGroup.style.display = 'none';
+                    proxyHolderGroup.style.display = 'none';
                     checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 } else { throw new Error(result.error); }
             } catch (error) {
@@ -290,6 +301,18 @@
                 submitButton.disabled = false;
             }
         };
+
+        proxyCheckbox.addEventListener('change', () => {
+            if (proxyCheckbox.checked) {
+                proxyHolderGroup.style.display = 'block';
+                checkboxContainer.style.display = 'none';
+                companyRepGroup.style.display = 'none';
+            } else {
+                proxyHolderGroup.style.display = 'none';
+                checkboxContainer.style.display = 'block';
+                // You might want to re-trigger showing the company rep box if applicable
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', fetchInitialData);
         lotInput.addEventListener('blur', fetchNames);
