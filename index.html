@@ -71,6 +71,8 @@
     </div>
 
     <script>
+        console.log("Attendance Form Code - v1.0");
+
         const lotInput = document.getElementById('lot-number');
         const checkboxContainer = document.getElementById('checkbox-container');
         const form = document.getElementById('attendance-form');
@@ -81,7 +83,6 @@
         const quorumDisplay = document.getElementById('quorum-display');
         const attendeeTableBody = document.getElementById('attendee-table-body');
 
-        // This is the persistent URL for your script deployment
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
         const updateQuorumDisplay = (count = 0, total = 0) => {
@@ -95,7 +96,7 @@
         };
 
         const renderAttendeeTable = (attendees) => {
-            attendeeTableBody.innerHTML = ''; // Clear existing table rows
+            attendeeTableBody.innerHTML = '';
             if (!attendees || attendees.length === 0) {
                 attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
                 return;
@@ -109,11 +110,11 @@
                 const companyName = isCompany ? attendee.name : '';
                 const statusText = attendee.status === 'Y' ? 'In Person' : 'Proxy';
 
-                let rowColor = '#d4e3c1'; // Default owner green
+                let rowColor = '#d4e3c1';
                 if (attendee.status === 'Proxy') {
-                    rowColor = '#c1e1e3'; // Proxy blue/teal
+                    rowColor = '#c1e1e3';
                 } else if (isCompany) {
-                    rowColor = '#cbc1e3'; // Company purple
+                    rowColor = '#cbc1e3';
                 }
 
                 const row = document.createElement('tr');
@@ -231,7 +232,7 @@
                     statusEl.textContent = 'Submission successful!';
                     statusEl.style.color = 'green';
                     updateQuorumDisplay(result.attendanceCount, result.totalLots);
-                    fetchAttendees(); // Refresh the attendee table
+                    fetchAttendees();
                     form.reset();
                     checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 } else { throw new Error(result.error); }
@@ -248,7 +249,7 @@
         document.addEventListener('DOMContentLoaded', fetchInitialData);
         lotInput.addEventListener('blur', fetchNames);
         form.addEventListener('submit', handleFormSubmit);
-        setInterval(fetchAttendees, 90000); // Auto-refresh attendee list every 90 seconds
+        setInterval(fetchAttendees, 90000);
     </script>
 
 </body>
