@@ -62,12 +62,7 @@
         const APPS_SCRIPT_URL = 'PASTE_YOUR_NEW_URL_HERE';
 
         const updateQuorumDisplay = (count, total) => {
-            if (total === 0) {
-                quorumDisplay.textContent = 'Quorum: N/A';
-                quorumDisplay.style.backgroundColor = '#6c757d'; // Gray
-                return;
-            }
-            const percentage = Math.floor((count / total) * 100);
+            const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
             quorumDisplay.textContent = `Quorum: ${percentage}%`;
             if (percentage >= 25) {
                 quorumDisplay.style.backgroundColor = '#28a745'; // Green
@@ -82,11 +77,12 @@
                 const data = await response.json();
                 if (data.success) {
                     updateQuorumDisplay(data.attendanceCount, data.totalLots);
+                } else {
+                    updateQuorumDisplay(0, 0); // Default to 0 on script error
                 }
             } catch (error) {
                 console.error("Could not fetch initial quorum:", error);
-                quorumDisplay.textContent = 'Quorum: Error';
-                quorumDisplay.style.backgroundColor = '#ffc107'; // Yellow
+                updateQuorumDisplay(0, 0); // Default to 0 on network error
             }
         };
 
