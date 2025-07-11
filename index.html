@@ -1,188 +1,195 @@
-// --- CONFIGURATION ---
-const SOURCE_SHEET_ID = '143EspDcO0leMPNnUE_XJIs0YGVjdbVchq5SQMEut2Do';
-const SOURCE_TAB_NAME = '77523 Lot Email Addresses';
-const DESTINATION_SHEET_ID = '15q4fAjDO1U_cSWEGuIdhYn2LZNkcafEYpo6zIYlRRUQ';
-const DESTINATION_TAB_NAME = 'Sheet1';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Form</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 2rem; background-color: #f8f9fa; }
+        .container { max-width: 600px; margin: auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        h1 { text-align: center; color: #333; margin: 0; }
+        #quorum-display { padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold; color: white; text-align: center; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        #checkbox-container { border: 1px solid #eee; padding: 1rem; border-radius: 4px; min-height: 50px; }
+        .checkbox-item { display: block; margin-bottom: 0.5rem; }
+        button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; }
+        button:disabled { background-color: #aaa; }
+        #status { text-align: center; margin-top: 1rem; font-weight: bold; }
+    </style>
+</head>
+<body>
 
-// Column indices from your source sheet (A=1, B=2, C=3, etc.)
-const LOT_COLUMN_SRC = 3;
-const NAME_ON_TITLE_COL = 6;
-const MAIN_CONTACT_COL = 7;
-// Column index for the destination sheet
-const DEST_LOT_COLUMN = 1; // Column A
+    <div class="container">
+        <div class="header-container">
+            <h1>Attendance Form</h1>
+            <div id="quorum-display">Quorum: ...%</div>
+        </div>
+        <form id="attendance-form">
+            <div class="form-group">
+                <label for="lot-number">Lot Number</label>
+                <input type="text" id="lot-number" required>
+            </div>
+            <hr>
+            <div class="form-group">
+                <label>Associated Names (select all present)</label>
+                <div id="checkbox-container">
+                    <p>Enter a Lot Number to see names.</p>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
+                <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is a Proxy form?</label>
+            </div>
+            <button type="submit" id="submit-button">Submit</button>
+            <p id="status"></p>
+        </form>
+    </div>
 
-/**
- * [UPDATED] Handles multiple actions: fetching names, and getting the current quorum count.
- */
-function doGet(e) {
-  const action = e.parameter.action || 'getNames';
+    <script>
+        const lotInput = document.getElementById('lot-number');
+        const checkboxContainer = document.getElementById('checkbox-container');
+        const form = document.getElementById('attendance-form');
+        const statusEl = document.getElementById('status');
+        const submitButton = document.getElementById('submit-button');
+        const financialCheckbox = document.getElementById('is-financial');
+        const proxyCheckbox = document.getElementById('is-proxy');
+        const quorumDisplay = document.getElementById('quorum-display');
 
-  try {
-    // ACTION 1: Get the current attendance numbers for the latest meeting
-    if (action === 'getQuorum') {
-      const sheet = SpreadsheetApp.openById(DESTINATION_SHEET_ID).getSheetByName(DESTINATION_TAB_NAME);
-      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      const totalLots = sheet.getLastRow() - 1; // Assuming header in row 1, lots start in row 2
+        // Remember to create a new deployment and paste the URL here
+        const APPS_SCRIPT_URL = 'PASTE_YOUR_NEW_URL_HERE';
 
-      let latestDate = new Date(0);
-      let attendanceCol = -1;
+        const updateQuorumDisplay = (count, total) => {
+            if (total === 0) {
+                quorumDisplay.textContent = 'Quorum: N/A';
+                quorumDisplay.style.backgroundColor = '#6c757d'; // Gray
+                return;
+            }
+            const percentage = Math.floor((count / total) * 100);
+            quorumDisplay.textContent = `Quorum: ${percentage}%`;
+            if (percentage >= 25) {
+                quorumDisplay.style.backgroundColor = '#28a745'; // Green
+            } else {
+                quorumDisplay.style.backgroundColor = '#dc3545'; // Red
+            }
+        };
 
-      // Find the column for the most recent meeting date
-      headers.forEach((header, index) => {
-        const match = String(header).match(/(\d{2})\/(\d{2})\/(\d{4})/);
-        if (match) {
-          const d = new Date(match[3], match[2] - 1, match[1]);
-          if (d > latestDate && !String(header).includes("Name") && !String(header).includes("Financial")) {
-            latestDate = d;
-            attendanceCol = index + 1;
-          }
-        }
-      });
+        const fetchInitialQuorum = async () => {
+            try {
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum`);
+                const data = await response.json();
+                if (data.success) {
+                    updateQuorumDisplay(data.attendanceCount, data.totalLots);
+                }
+            } catch (error) {
+                console.error("Could not fetch initial quorum:", error);
+                quorumDisplay.textContent = 'Quorum: Error';
+                quorumDisplay.style.backgroundColor = '#ffc107'; // Yellow
+            }
+        };
 
-      let attendanceCount = 0;
-      if (attendanceCol > 0) {
-        const attendanceData = sheet.getRange(2, attendanceCol, sheet.getLastRow()).getValues();
-        attendanceCount = attendanceData.filter(cell => String(cell[0]).trim() !== '').length;
-      }
-      
-      return ContentService.createTextOutput(JSON.stringify({ 
-          success: true, 
-          attendanceCount: attendanceCount,
-          totalLots: totalLots 
-        }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    // ACTION 2 (default): Get names for a lot number
-    const lotNumber = e.parameter.lot.trim();
-    let allNames = [];
-    
-    const sheet = SpreadsheetApp.openById(SOURCE_SHEET_ID).getSheetByName(SOURCE_TAB_NAME);
-    const lotColumnRange = sheet.getRange(1, LOT_COLUMN_SRC, sheet.getLastRow());
-    const textFinder = lotColumnRange.createTextFinder(lotNumber).matchEntireCell(true);
-    const foundLots = textFinder.findAll();
+        const fetchNames = async () => {
+            const lot = lotInput.value.trim();
+            if (!lot) {
+                checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
+                return;
+            }
+            checkboxContainer.innerHTML = '<p>Loading names...</p>';
+            try {
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}`);
+                const data = await response.json();
+                if (data.success && data.names.length > 0) {
+                    checkboxContainer.innerHTML = '';
+                    data.names.forEach(name => {
+                        const div = document.createElement('div');
+                        div.className = 'checkbox-item';
+                        div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
+                        checkboxContainer.appendChild(div);
+                    });
+                } else if (data.success) {
+                    checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot Number.</p>';
+                } else { throw new Error(data.error); }
+            } catch (error) {
+                console.error('Error fetching names:', error);
+                checkboxContainer.innerHTML = '<p style="color: red;">Error fetching names. Please try again.</p>';
+            }
+        };
 
-    for (const lotRange of foundLots) {
-      const row = lotRange.getRow();
-      const fullNameOnTitle = sheet.getRange(row, NAME_ON_TITLE_COL).getValue().toString().trim();
-      const mainContactName = sheet.getRange(row, MAIN_CONTACT_COL).getValue().toString().trim();
-      
-      let finalNameString = mainContactName;
-      const hasTitles = /\b(Mr|Mrs|Ms|Miss)\b/i.test(mainContactName);
-      const firstWord = mainContactName.split(' ')[0];
-      const firstNameIsInitial = /^[A-Z]\.?$/.test(firstWord);
+        const handleFormSubmit = async (event) => {
+            event.preventDefault();
+            submitButton.disabled = true;
+            statusEl.textContent = 'Submitting...';
+            statusEl.style.color = '#333';
 
-      if (hasTitles || firstNameIsInitial) {
-        finalNameString = fullNameOnTitle;
-      }
-      const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(finalNameString);
-      
-      let parsedNames = [];
-      if (isCompany) {
-        parsedNames = [finalNameString];
-      } else {
-        parsedNames = finalNameString.split(/\s+and\s+|\s*&\s*|\s*,\s*/i)
-                               .map(name => name.trim())
-                               .filter(name => name);
-      }
-      allNames.push(...parsedNames);
-    }
-    
-    const uniqueNames = [...new Set(allNames)];
-    return ContentService.createTextOutput(JSON.stringify({ success: true, names: uniqueNames }))
-      .setMimeType(ContentService.MimeType.JSON);
+            const lot = lotInput.value.trim();
+            const selectedCheckboxes = document.querySelectorAll('input[name="attendee"]:checked');
+            const selectedNames = Array.from(selectedCheckboxes).map(cb => cb.value);
+            const isFinancial = financialCheckbox.checked;
+            const isProxy = proxyCheckbox.checked;
 
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
+            if (!lot || selectedNames.length === 0) {
+                statusEl.textContent = 'Please enter a Lot and select at least one name.';
+                statusEl.style.color = 'red';
+                submitButton.disabled = false;
+                return;
+            }
 
-/**
- * [UPDATED] Handles POST requests. Now includes proxy logic and returns quorum data.
- */
-function doPost(e) {
-  try {
-    const submissionData = JSON.parse(e.postData.contents);
-    const lotNumber = submissionData.lot;
-    const selectedNames = submissionData.names;
-    const isFinancial = submissionData.financial;
-    const meetingName = submissionData.meetingName;
-    const isProxy = submissionData.proxy; // New variable
+            try {
+                statusEl.textContent = 'Checking for existing columns...';
+                const checkResponse = await fetch(`${APPS_SCRIPT_URL}?action=checkDate`);
+                const checkData = await checkResponse.json();
+                
+                let meetingName = null;
 
-    const sheet = SpreadsheetApp.openById(DESTINATION_SHEET_ID).getSheetByName(DESTINATION_TAB_NAME);
-    const lotColumnRange = sheet.getRange(1, DEST_LOT_COLUMN, sheet.getLastRow());
-    const textFinder = lotColumnRange.createTextFinder(lotNumber).matchEntireCell(true);
-    const foundLot = textFinder.findNext();
+                if (checkData.success && !checkData.dateExists) {
+                    meetingName = window.prompt("Columns for today's date were not found.\nPlease enter the meeting name (e.g., EGM, AGM):");
+                    if (!meetingName) {
+                        statusEl.textContent = "Submission cancelled.";
+                        submitButton.disabled = false;
+                        return;
+                    }
+                } else if (!checkData.success) {
+                    throw new Error(checkData.error);
+                }
 
-    if (!foundLot) {
-      throw new Error(`Lot Number "${lotNumber}" not found in the destination sheet.`);
-    }
-    
-    const targetRow = foundLot.getRow();
-    const dateString = Utilities.formatDate(new Date(), "Australia/Sydney", "dd/MM/yyyy");
-    
-    const nameHeader = `${dateString} Name`;
-    const financialHeader = `${dateString} Financial`;
-    let attendanceHeader = "";
+                statusEl.textContent = 'Submitting attendance...';
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({ 
+                        lot: lot, 
+                        names: selectedNames, 
+                        financial: isFinancial,
+                        proxy: isProxy,
+                        meetingName: meetingName
+                    })
+                });
+                const result = await response.json();
 
-    if (meetingName) {
-      attendanceHeader = `${dateString} ${meetingName}`;
-    }
+                if (result.success) {
+                    statusEl.textContent = 'Submission successful!';
+                    statusEl.style.color = 'green';
+                    updateQuorumDisplay(result.attendanceCount, result.totalLots); // Update display on success
+                    form.reset();
+                    checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
+                } else { throw new Error(result.error); }
+            } catch (error) {
+                console.error('Submission Error:', error);
+                statusEl.textContent = `Submission failed: ${error.message}`;
+                statusEl.style.color = 'red';
+            } finally {
+                submitButton.disabled = false;
+            }
+        };
 
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn() + 3).getValues()[0];
-    let nameCol = headers.indexOf(nameHeader) + 1;
-    let financialCol = headers.indexOf(financialHeader) + 1;
-    let attendanceCol = -1;
+        // Fetch the initial quorum when the page loads
+        document.addEventListener('DOMContentLoaded', fetchInitialQuorum);
+        lotInput.addEventListener('blur', fetchNames);
+        form.addEventListener('submit', handleFormSubmit);
+    </script>
 
-    if (attendanceHeader) {
-      attendanceCol = headers.indexOf(attendanceHeader) + 1;
-    } else {
-      for (let i = 0; i < headers.length; i++) {
-        const headerText = String(headers[i]);
-        if (headerText.includes(dateString) && !headerText.includes("Name") && !headerText.includes("Financial")) {
-          attendanceCol = i + 1;
-          break;
-        }
-      }
-    }
-    
-    if (attendanceHeader && attendanceCol === 0) {
-      attendanceCol = sheet.getLastColumn() + 1;
-      sheet.getRange(1, attendanceCol).setValue(attendanceHeader);
-    }
-    if (nameCol === 0) {
-        nameCol = sheet.getLastColumn() + 1;
-        sheet.getRange(1, nameCol).setValue(nameHeader);
-    }
-    if (financialCol === 0) {
-        financialCol = sheet.getLastColumn() + 1;
-        sheet.getRange(1, financialCol).setValue(financialHeader);
-    }
-    
-    const attendanceValue = isProxy ? 'Proxy' : 'Y'; // Set attendance value
-    if (attendanceCol > 0) {
-      sheet.getRange(targetRow, attendanceCol).setValue(attendanceValue);
-    }
-    sheet.getRange(targetRow, nameCol).setValue(selectedNames.join(', '));
-    sheet.getRange(targetRow, financialCol).setValue(isFinancial ? 'Yes' : 'No');
-    
-    // After writing, get the updated quorum count to send back
-    SpreadsheetApp.flush(); // Ensure all writes are committed before reading
-    const totalLots = sheet.getLastRow() - 1;
-    const attendanceData = sheet.getRange(2, attendanceCol, sheet.getLastRow()).getValues();
-    const attendanceCount = attendanceData.filter(cell => String(cell[0]).trim() !== '').length;
-
-    return ContentService.createTextOutput(JSON.stringify({ 
-        success: true, 
-        message: 'Submission successful!',
-        attendanceCount: attendanceCount,
-        totalLots: totalLots
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
+</body>
+</html>
