@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v1.11 (cache fix)");
+        console.info("Attendance Form Code - v1.13");
     </script>
 </head>
 <body>
@@ -154,7 +154,7 @@
                 const data = await response.json();
                 if (data.success) {
                     setCookie('strataPlanList', JSON.stringify(data), 0.25);
-                    renderStrataPlans(data.plans); // This line was added to render on first fetch
+                    renderStrataPlans(data.plans);
                 }
             } catch (error) {
                 console.error("Could not fetch strata plans:", error);
@@ -231,8 +231,10 @@
         const fetchInitialData = async () => {
             const sp = strataPlanSelect.value;
             if (!sp) {
-                updateQuorumDisplay();
+                quorumDisplay.textContent = 'Select a plan';
+                quorumDisplay.style.backgroundColor = '#6c757d'; // Gray
                 renderAttendeeTable([]);
+                personCountSpan.textContent = '';
                 return;
             };
             quorumDisplay.textContent = 'Loading...';
