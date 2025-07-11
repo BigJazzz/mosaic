@@ -28,7 +28,7 @@
         #company-rep-group { display: none; } /* Hidden by default */
     </style>
     <script>
-        console.info("Attendance Form Code - v1.4");
+        console.info("Attendance Form Code - v1.5");
     </script>
 </head>
 <body>
@@ -71,6 +71,7 @@
                         <th>Owner</th>
                         <th>Company</th>
                         <th>Status</th>
+                        <th>Delete?</th>
                     </tr>
                 </thead>
                 <tbody id="attendee-table-body">
@@ -95,13 +96,27 @@
 
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
-        const updateQuorumDisplay = (count = 0, total = 0) => {
-            const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
-            if (percentage >= 25) {
-                quorumDisplay.style.backgroundColor = '#28a745';
-            } else {
-                quorumDisplay.style.backgroundColor = '#dc3545';
+        const handleDelete = async (lotNumber) => {
+            if (confirm(`Are you sure you want to delete the attendance record for Lot ${lotNumber}?`)) {
+                statusEl.textContent = `Deleting Lot ${lotNumber}...`;
+                try {
+                    const response = await fetch(APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain' },
+                        body: JSON.stringify({ action: 'delete', lot: lotNumber })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
+                        fetchInitialData(); // Refresh all data
+                    } else {
+                        throw new Error(result.error);
+                    }
+                } catch (error) {
+                    console.error('Deletion Error:', error);
+                    statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
+                }
             }
         };
 
@@ -109,7 +124,7 @@
             attendeeTableBody.innerHTML = '';
             personCountSpan.textContent = `(${personCount || 0} people)`;
             if (!attendees || attendees.length === 0) {
-                attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
+                attendeeTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No attendees yet.</td></tr>`;
                 return;
             }
             attendees.sort((a, b) => a.lot - b.lot);
@@ -122,11 +137,28 @@
                 let rowColor = '#d4e3c1';
                 if (attendee.status === 'Proxy') rowColor = '#c1e1e3';
                 else if (isCompany) rowColor = '#cbc1e3';
+
                 const row = document.createElement('tr');
                 row.style.backgroundColor = rowColor;
-                row.innerHTML = `<td>${attendee.lot}</td><td>${ownerName}</td><td>${companyName}</td><td>${statusText}</td>`;
+                row.innerHTML = `
+                    <td>${attendee.lot}</td>
+                    <td>${ownerName}</td>
+                    <td>${companyName}</td>
+                    <td>${statusText}</td>
+                    <td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>
+                `;
                 attendeeTableBody.appendChild(row);
             });
+        };
+
+        const updateQuorumDisplay = (count = 0, total = 0) => {
+            const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
+            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
+            if (percentage >= 25) {
+                quorumDisplay.style.backgroundColor = '#28a745';
+            } else {
+                quorumDisplay.style.backgroundColor = '#dc3545';
+            }
         };
 
         const fetchAttendees = async () => {
@@ -160,9 +192,8 @@
 
         const fetchNames = async () => {
             const lot = lotInput.value.trim();
-            companyRepGroup.style.display = 'none'; // Hide by default on new fetch
+            companyRepGroup.style.display = 'none';
             companyRepInput.value = '';
-
             if (!lot) {
                 checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 return;
@@ -177,9 +208,6 @@
                         const div = document.createElement('div');
                         div.className = 'checkbox-item';
                         div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
-                        checkboxContainer.appendChild(div);
-
-                        // If any name is a company, show the rep input field
                         if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
                             companyRepGroup.style.display = 'block';
                         }
@@ -234,12 +262,13 @@
                     mode: 'cors',
                     headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify({ 
+                        action: 'submit',
                         lot: lot, 
                         names: selectedNames, 
                         financial: isFinancial,
                         proxy: isProxy,
                         meetingName: meetingName,
-                        companyRep: companyRep // Send the rep name
+                        companyRep: companyRep
                     })
                 });
                 const result = await response.json();
@@ -250,7 +279,7 @@
                     updateQuorumDisplay(result.attendanceCount, result.totalLots);
                     fetchAttendees();
                     form.reset();
-                    companyRepGroup.style.display = 'none'; // Hide after successful submission
+                    companyRepGroup.style.display = 'none';
                     checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 } else { throw new Error(result.error); }
             } catch (error) {
