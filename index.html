@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v1.15");
+        console.info("Attendance Form Code - v1.16 (cookie tidy)");
     </script>
 </head>
 <body>
@@ -129,6 +129,11 @@
         }
 
         const renderStrataPlans = (plans) => {
+            if (!plans) {
+                console.error("renderStrataPlans was called with invalid data.");
+                return;
+            }
+            strataPlanSelect.innerHTML = '<option value="">Select a plan...</option>';
             plans.sort((a, b) => a.sp - b.sp);
             plans.forEach(plan => {
                 const option = document.createElement('option');
@@ -145,15 +150,20 @@
         const populateStrataPlans = async () => {
             const cachedPlansJSON = getCookie('strataPlanList');
             if (cachedPlansJSON) {
-                renderStrataPlans(JSON.parse(cachedPlansJSON).plans);
+                try {
+                    renderStrataPlans(JSON.parse(cachedPlansJSON)); // Use parsed plans directly
+                } catch(e) {
+                    setCookie('strataPlanList', '', -1); // Delete corrupted cookie
+                    populateStrataPlans(); // Try again
+                }
                 return;
             }
 
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
                 const data = await response.json();
-                if (data.success) {
-                    setCookie('strataPlanList', JSON.stringify(data), 0.25);
+                if (data.success && data.plans) {
+                    setCookie('strataPlanList', JSON.stringify(data.plans), 0.25); // Only cache the plans array
                     renderStrataPlans(data.plans);
                 }
             } catch (error) {
@@ -197,20 +207,20 @@
                 
                 let ownerRepName = '';
                 let companyName = '';
-                let rowColor = '#d4e3c1'; // Owner green
+                let rowColor = '#d4e3c1';
                 
                 if (isProxy) {
-                    companyName = attendee.name; // Show 'Proxy - Lot #' in Company column
-                    rowColor = '#c1e1e3'; // Proxy blue/teal
+                    companyName = attendee.name;
+                    rowColor = '#c1e1e3';
                 } else if (isCompany) {
                     const parts = attendee.name.split(' - ');
                     companyName = parts[0].trim();
                     if (parts.length > 1) {
-                        ownerRepName = parts[1].trim(); // Rep name
+                        ownerRepName = parts[1].trim();
                     }
-                    rowColor = '#cbc1e3'; // Company purple
+                    rowColor = '#cbc1e3';
                 } else {
-                    ownerRepName = attendee.name; // Owner name
+                    ownerRepName = attendee.name;
                 }
                 
                 const row = document.createElement('tr');
