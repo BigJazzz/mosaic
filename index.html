@@ -9,7 +9,8 @@
         .container { max-width: 600px; margin: auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
         h1 { text-align: center; color: #333; margin: 0; }
-        #quorum-display { padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold; color: white; text-align: center; }
+        #quorum-display { padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold; color: white; text-align: center; line-height: 1.2; }
+        #quorum-display small { font-weight: normal; font-size: 0.8em; }
         .form-group { margin-bottom: 1rem; }
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
         input[type="text"] { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
@@ -40,8 +41,8 @@
                 </div>
             </div>
             <div class="form-group">
-                <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is the owner financial?</label>
-                <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is the owner voting via proxy?</label>
+                <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
+                <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is a Proxy form?</label>
             </div>
             <button type="submit" id="submit-button">Submit</button>
             <p id="status"></p>
@@ -58,12 +59,12 @@
         const proxyCheckbox = document.getElementById('is-proxy');
         const quorumDisplay = document.getElementById('quorum-display');
 
-        // Remember to create a new deployment and paste the URL here
+        // Your Web App URL
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
         const updateQuorumDisplay = (count, total) => {
             const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-            quorumDisplay.textContent = `Quorum: ${percentage}%`;
+            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
             if (percentage >= 25) {
                 quorumDisplay.style.backgroundColor = '#28a745'; // Green
             } else {
@@ -78,11 +79,11 @@
                 if (data.success) {
                     updateQuorumDisplay(data.attendanceCount, data.totalLots);
                 } else {
-                    updateQuorumDisplay(0, 0); // Default to 0 on script error
+                    updateQuorumDisplay(0, 0);
                 }
             } catch (error) {
                 console.error("Could not fetch initial quorum:", error);
-                updateQuorumDisplay(0, 0); // Default to 0 on network error
+                updateQuorumDisplay(0, 0);
             }
         };
 
@@ -168,7 +169,7 @@
                 if (result.success) {
                     statusEl.textContent = 'Submission successful!';
                     statusEl.style.color = 'green';
-                    updateQuorumDisplay(result.attendanceCount, result.totalLots); // Update display on success
+                    updateQuorumDisplay(result.attendanceCount, result.totalLots);
                     form.reset();
                     checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 } else { throw new Error(result.error); }
