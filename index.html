@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v1.13");
+        console.info("Attendance Form Code - v1.14 (cookie debug)");
     </script>
 </head>
 <body>
@@ -129,6 +129,11 @@
         }
 
         const renderStrataPlans = (plans) => {
+            if (!plans) {
+                console.error("renderStrataPlans was called with invalid data.");
+                return;
+            }
+            strataPlanSelect.innerHTML = '<option value="">Select a plan...</option>'; // Clear previous options
             plans.sort((a, b) => a.sp - b.sp);
             plans.forEach(plan => {
                 const option = document.createElement('option');
@@ -145,14 +150,23 @@
         const populateStrataPlans = async () => {
             const cachedPlansJSON = getCookie('strataPlanList');
             if (cachedPlansJSON) {
-                renderStrataPlans(JSON.parse(cachedPlansJSON).plans);
+                console.log("Populating Strata Plans from cookie cache.", cachedPlansJSON);
+                try {
+                    renderStrataPlans(JSON.parse(cachedPlansJSON).plans);
+                } catch(e) {
+                    console.error("Failed to parse cached strata plans. Deleting cookie and refetching.", e);
+                    setCookie('strataPlanList', '', -1); // Delete corrupted cookie
+                    populateStrataPlans(); // Try again
+                }
                 return;
             }
 
+            console.log("No cache found. Fetching Strata Plans from script.");
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
                 const data = await response.json();
-                if (data.success) {
+                console.log("Fetched new strata plans:", data);
+                if (data.success && data.plans) {
                     setCookie('strataPlanList', JSON.stringify(data), 0.25);
                     renderStrataPlans(data.plans);
                 }
@@ -232,7 +246,7 @@
             const sp = strataPlanSelect.value;
             if (!sp) {
                 quorumDisplay.textContent = 'Select a plan';
-                quorumDisplay.style.backgroundColor = '#6c757d'; // Gray
+                quorumDisplay.style.backgroundColor = '#6c757d';
                 renderAttendeeTable([]);
                 personCountSpan.textContent = '';
                 return;
