@@ -62,9 +62,9 @@
         // Your Web App URL
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
-        const updateQuorumDisplay = (count, total) => {
+        const updateQuorumDisplay = (count = 0, total = 0) => {
             const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count})</small>`;
+            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
             if (percentage >= 25) {
                 quorumDisplay.style.backgroundColor = '#28a745'; // Green
             } else {
@@ -79,11 +79,11 @@
                 if (data.success) {
                     updateQuorumDisplay(data.attendanceCount, data.totalLots);
                 } else {
-                    updateQuorumDisplay(0, 0);
+                    updateQuorumDisplay(); // Default to 0 on script error
                 }
             } catch (error) {
                 console.error("Could not fetch initial quorum:", error);
-                updateQuorumDisplay(0, 0);
+                updateQuorumDisplay(); // Default to 0 on network error
             }
         };
 
