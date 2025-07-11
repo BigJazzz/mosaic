@@ -19,6 +19,11 @@
         button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; }
         button:disabled { background-color: #aaa; }
         #status { text-align: center; margin-top: 1rem; font-weight: bold; }
+        /* New Table Styles */
+        .attendee-section { margin-top: 2rem; }
+        .attendee-table { width: 100%; border-collapse: collapse; }
+        .attendee-table th, .attendee-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
+        .attendee-table th { background-color: #f2f2f2; }
     </style>
 </head>
 <body>
@@ -47,6 +52,22 @@
             <button type="submit" id="submit-button">Submit</button>
             <p id="status"></p>
         </form>
+
+        <div class="attendee-section">
+            <h2>Current Attendees</h2>
+            <table class="attendee-table">
+                <thead>
+                    <tr>
+                        <th>Lot</th>
+                        <th>Owner</th>
+                        <th>Company</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="attendee-table-body">
+                    </tbody>
+            </table>
+        </div>
     </div>
 
     <script>
@@ -58,8 +79,9 @@
         const financialCheckbox = document.getElementById('is-financial');
         const proxyCheckbox = document.getElementById('is-proxy');
         const quorumDisplay = document.getElementById('quorum-display');
+        const attendeeTableBody = document.getElementById('attendee-table-body');
 
-        // Your Web App URL
+        // Remember to create a new deployment and paste the URL here
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
         const updateQuorumDisplay = (count = 0, total = 0) => {
@@ -72,22 +94,72 @@
             }
         };
 
-        const fetchInitialQuorum = async () => {
+        const renderAttendeeTable = (attendees) => {
+            attendeeTableBody.innerHTML = ''; // Clear existing table rows
+            if (!attendees || attendees.length === 0) {
+                attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
+                return;
+            }
+
+            // Sort by lot number numerically
+            attendees.sort((a, b) => a.lot - b.lot);
+
+            attendees.forEach(attendee => {
+                const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
+                const ownerName = isCompany ? '' : attendee.name;
+                const companyName = isCompany ? attendee.name : '';
+                const statusText = attendee.status === 'Y' ? 'In Person' : 'Proxy';
+
+                let rowColor = '#d4e3c1'; // Default owner green
+                if (attendee.status === 'Proxy') {
+                    rowColor = '#c1e1e3'; // Proxy blue/teal
+                } else if (isCompany) {
+                    rowColor = '#cbc1e3'; // Company purple
+                }
+
+                const row = document.createElement('tr');
+                row.style.backgroundColor = rowColor;
+                row.innerHTML = `
+                    <td>${attendee.lot}</td>
+                    <td>${ownerName}</td>
+                    <td>${companyName}</td>
+                    <td>${statusText}</td>
+                `;
+                attendeeTableBody.appendChild(row);
+            });
+        };
+
+        const fetchAttendees = async () => {
             try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum`);
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees`);
                 const data = await response.json();
                 if (data.success) {
-                    updateQuorumDisplay(data.attendanceCount, data.totalLots);
-                } else {
-                    updateQuorumDisplay(); // Default to 0 on script error
+                    renderAttendeeTable(data.attendees);
                 }
             } catch (error) {
-                console.error("Could not fetch initial quorum:", error);
-                updateQuorumDisplay(); // Default to 0 on network error
+                console.error("Could not fetch attendee list:", error);
             }
         };
 
+        const fetchInitialData = async () => {
+            quorumDisplay.textContent = 'Loading...';
+            try {
+                const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum`);
+                const quorumData = await quorumResponse.json();
+                if (quorumData.success) {
+                    updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
+                } else {
+                    updateQuorumDisplay();
+                }
+            } catch (error) {
+                console.error("Could not fetch initial quorum:", error);
+                updateQuorumDisplay();
+            }
+            await fetchAttendees();
+        };
+
         const fetchNames = async () => {
+            // This function remains the same as before
             const lot = lotInput.value.trim();
             if (!lot) {
                 checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
@@ -115,6 +187,7 @@
         };
 
         const handleFormSubmit = async (event) => {
+            // This function remains largely the same, but now updates the attendee list on success
             event.preventDefault();
             submitButton.disabled = true;
             statusEl.textContent = 'Submitting...';
@@ -139,7 +212,6 @@
                 const checkData = await checkResponse.json();
                 
                 let meetingName = null;
-
                 if (checkData.success && !checkData.dateExists) {
                     meetingName = window.prompt("Columns for today's date were not found.\nPlease enter the meeting name (e.g., EGM, AGM):");
                     if (!meetingName) {
@@ -147,22 +219,14 @@
                         submitButton.disabled = false;
                         return;
                     }
-                } else if (!checkData.success) {
-                    throw new Error(checkData.error);
-                }
+                } else if (!checkData.success) { throw new Error(checkData.error); }
 
                 statusEl.textContent = 'Submitting attendance...';
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'cors',
                     headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify({ 
-                        lot: lot, 
-                        names: selectedNames, 
-                        financial: isFinancial,
-                        proxy: isProxy,
-                        meetingName: meetingName
-                    })
+                    body: JSON.stringify({ lot: lot, names: selectedNames, financial: isFinancial, proxy: isProxy, meetingName: meetingName })
                 });
                 const result = await response.json();
 
@@ -170,6 +234,7 @@
                     statusEl.textContent = 'Submission successful!';
                     statusEl.style.color = 'green';
                     updateQuorumDisplay(result.attendanceCount, result.totalLots);
+                    fetchAttendees(); // Refresh the attendee table
                     form.reset();
                     checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 } else { throw new Error(result.error); }
@@ -182,11 +247,6 @@
             }
         };
 
-        // Fetch the initial quorum when the page loads
-        document.addEventListener('DOMContentLoaded', fetchInitialQuorum);
+        // --- Event Listeners and Timers ---
+        document.addEventListener('DOMContentLoaded', fetchInitialData);
         lotInput.addEventListener('blur', fetchNames);
-        form.addEventListener('submit', handleFormSubmit);
-    </script>
-
-</body>
-</html>
