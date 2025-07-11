@@ -24,10 +24,10 @@
         .attendee-table { width: 100%; border-collapse: collapse; }
         .attendee-table th, .attendee-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
         .attendee-table th { background-color: #f2f2f2; }
-        #company-rep-group, #proxy-holder-group { display: none; } /* Hidden by default */
+        #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v1.7");
+        console.info("Attendance Form Code - v1.8");
     </script>
 </head>
 <body>
@@ -97,6 +97,8 @@
         const personCountSpan = document.getElementById('person-count');
         const proxyHolderGroup = document.getElementById('proxy-holder-group');
         const proxyHolderLotInput = document.getElementById('proxy-holder-lot');
+        
+        let fetchedNames = []; // Store the names fetched for the current lot
 
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
@@ -190,6 +192,7 @@
             const lot = lotInput.value.trim();
             companyRepGroup.style.display = 'none';
             companyRepInput.value = '';
+            fetchedNames = []; // Reset stored names
             if (!lot) {
                 checkboxContainer.innerHTML = '<p>Enter a Lot Number to see names.</p>';
                 return;
@@ -199,6 +202,7 @@
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}`);
                 const data = await response.json();
                 if (data.success && data.names.length > 0) {
+                    fetchedNames = data.names; // Store names for later validation
                     checkboxContainer.innerHTML = '';
                     data.names.forEach(name => {
                         const div = document.createElement('div');
@@ -237,18 +241,16 @@
                     submitButton.disabled = false;
                     return;
                 }
-                selectedNames = []; // Clear selected names for a proxy vote
+                selectedNames = [];
             } else {
-                if (selectedNames.length === 0) {
-                    const availableCheckboxes = document.querySelectorAll('input[name="attendee"]');
-                    if (availableCheckboxes.length > 0) {
-                        const potentialName = availableCheckboxes[0].value;
-                        const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(potentialName);
-                        if (isCompany) {
-                            selectedNames = [potentialName];
-                        }
+                // If no owner is checked, check if it's a company lot
+                if (selectedNames.length === 0 && fetchedNames.length > 0) {
+                    const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0]);
+                    if (isCompany) {
+                        selectedNames = [fetchedNames[0]]; // Auto-select the company name
                     }
                 }
+                // Final check
                 if (selectedNames.length === 0) {
                     statusEl.textContent = 'Please select at least one owner.';
                     statusEl.style.color = 'red';
@@ -310,7 +312,10 @@
             } else {
                 proxyHolderGroup.style.display = 'none';
                 checkboxContainer.style.display = 'block';
-                // You might want to re-trigger showing the company rep box if applicable
+                // Re-check if company rep box should be shown
+                if (fetchedNames.length > 0 && /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0])) {
+                    companyRepGroup.style.display = 'block';
+                }
             }
         });
 
