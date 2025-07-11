@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v1.14 (cookie debug)");
+        console.info("Attendance Form Code - v1.15");
     </script>
 </head>
 <body>
@@ -77,7 +77,7 @@
                 <thead>
                     <tr>
                         <th>Lot</th>
-                        <th>Owner</th>
+                        <th>Owner/Rep</th>
                         <th>Company</th>
                         <th>Delete?</th>
                     </tr>
@@ -129,11 +129,6 @@
         }
 
         const renderStrataPlans = (plans) => {
-            if (!plans) {
-                console.error("renderStrataPlans was called with invalid data.");
-                return;
-            }
-            strataPlanSelect.innerHTML = '<option value="">Select a plan...</option>'; // Clear previous options
             plans.sort((a, b) => a.sp - b.sp);
             plans.forEach(plan => {
                 const option = document.createElement('option');
@@ -150,23 +145,14 @@
         const populateStrataPlans = async () => {
             const cachedPlansJSON = getCookie('strataPlanList');
             if (cachedPlansJSON) {
-                console.log("Populating Strata Plans from cookie cache.", cachedPlansJSON);
-                try {
-                    renderStrataPlans(JSON.parse(cachedPlansJSON).plans);
-                } catch(e) {
-                    console.error("Failed to parse cached strata plans. Deleting cookie and refetching.", e);
-                    setCookie('strataPlanList', '', -1); // Delete corrupted cookie
-                    populateStrataPlans(); // Try again
-                }
+                renderStrataPlans(JSON.parse(cachedPlansJSON).plans);
                 return;
             }
 
-            console.log("No cache found. Fetching Strata Plans from script.");
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
                 const data = await response.json();
-                console.log("Fetched new strata plans:", data);
-                if (data.success && data.plans) {
+                if (data.success) {
                     setCookie('strataPlanList', JSON.stringify(data), 0.25);
                     renderStrataPlans(data.plans);
                 }
@@ -208,14 +194,28 @@
             attendees.forEach(attendee => {
                 const isProxy = String(attendee.name).startsWith('Proxy - Lot');
                 const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
-                const ownerName = isCompany || isProxy ? '' : attendee.name;
-                const companyName = isCompany || isProxy ? attendee.name : '';
-                let rowColor = '#d4e3c1';
-                if (isProxy) rowColor = '#c1e1e3';
-                else if (isCompany) rowColor = '#cbc1e3';
+                
+                let ownerRepName = '';
+                let companyName = '';
+                let rowColor = '#d4e3c1'; // Owner green
+                
+                if (isProxy) {
+                    companyName = attendee.name; // Show 'Proxy - Lot #' in Company column
+                    rowColor = '#c1e1e3'; // Proxy blue/teal
+                } else if (isCompany) {
+                    const parts = attendee.name.split(' - ');
+                    companyName = parts[0].trim();
+                    if (parts.length > 1) {
+                        ownerRepName = parts[1].trim(); // Rep name
+                    }
+                    rowColor = '#cbc1e3'; // Company purple
+                } else {
+                    ownerRepName = attendee.name; // Owner name
+                }
+                
                 const row = document.createElement('tr');
                 row.style.backgroundColor = rowColor;
-                row.innerHTML = `<td>${attendee.lot}</td><td>${ownerName}</td><td>${companyName}</td><td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>`;
+                row.innerHTML = `<td>${attendee.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>`;
                 attendeeTableBody.appendChild(row);
             });
         };
