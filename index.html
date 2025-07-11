@@ -106,7 +106,6 @@
         
         let fetchedNames = [];
 
-        // Your new, confirmed working URL
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx3BLTa56T1u0EPl4vwnSt6QIICljElREAaziiZ2K6ZRTd8wJFcMJgefDjkq4XrhonVqA/exec';
 
         const setCookie = (name, value, days) => {
@@ -152,7 +151,7 @@
                 return;
             }
             try {
-                const response = await fetch(APPS_SCRIPT_URL); // Simplified script only has one action
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
                 const data = await response.json();
                 if (data.success && data.plans) {
                     setCookie('strataPlanList', JSON.stringify(data.plans), 0.25);
@@ -162,12 +161,254 @@
                 console.error("Could not fetch strata plans:", error);
             }
         };
+
+        const handleDelete = async (lotNumber) => {
+            const sp = strataPlanSelect.value;
+            if (!sp) { alert("Please select a Strata Plan first."); return; }
+            if (confirm(`Are you sure you want to delete the attendance record for Lot ${lotNumber}?`)) {
+                statusEl.textContent = `Deleting Lot ${lotNumber}...`;
+                try {
+                    const response = await fetch(APPS_SCRIPT_URL, {
+                        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
+                        body: JSON.stringify({ action: 'delete', lot: lotNumber, sp: sp })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
+                        fetchInitialData();
+                    } else { throw new Error(result.error); }
+                } catch (error) {
+                    console.error('Deletion Error:', error);
+                    statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
+                }
+            }
+        };
+
+        const renderAttendeeTable = (attendees, personCount) => {
+            attendeeTableBody.innerHTML = '';
+            personCountSpan.textContent = `(${personCount || 0} people)`;
+            if (!attendees || attendees.length === 0) {
+                attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
+                return;
+            }
+            attendees.sort((a, b) => a.lot - b.lot);
+            attendees.forEach(attendee => {
+                const isProxy = String(attendee.name).startsWith('Proxy - Lot');
+                const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
+                let ownerRepName = '';
+                let companyName = '';
+                let rowColor = '#d4e3c1';
+                if (isProxy) {
+                    companyName = attendee.name;
+                    rowColor = '#c1e1e3';
+                } else if (isCompany) {
+                    const parts = attendee.name.split(' - ');
+                    companyName = parts[0].trim();
+                    if (parts.length > 1) ownerRepName = parts[1].trim();
+                    rowColor = '#cbc1e3';
+                } else {
+                    ownerRepName = attendee.name;
+                }
+                const row = document.createElement('tr');
+                row.style.backgroundColor = rowColor;
+                row.innerHTML = `<td>${attendee.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>`;
+                attendeeTableBody.appendChild(row);
+            });
+        };
+
+        const updateQuorumDisplay = (count = 0, total = 0) => {
+            const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
+            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
+            if (percentage >= 25) {
+                quorumDisplay.style.backgroundColor = '#28a745';
+            } else {
+                quorumDisplay.style.backgroundColor = '#dc3545';
+            }
+        };
+
+        const fetchAttendees = async () => {
+            const sp = strataPlanSelect.value;
+            if (!sp) return;
+            try {
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`);
+                const data = await response.json();
+                if (data.success) {
+                    renderAttendeeTable(data.attendees, data.personCount);
+                }
+            } catch (error) { console.error("Could not fetch attendee list:", error); }
+        };
+
+        const fetchInitialData = async () => {
+            const sp = strataPlanSelect.value;
+            if (!sp) {
+                quorumDisplay.textContent = 'Select a plan';
+                quorumDisplay.style.backgroundColor = '#6c757d';
+                renderAttendeeTable([]);
+                personCountSpan.textContent = '';
+                return;
+            };
+            quorumDisplay.textContent = 'Loading...';
+            try {
+                const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`);
+                const quorumData = await quorumResponse.json();
+                if (quorumData.success) {
+                    updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
+                } else { updateQuorumDisplay(); }
+            } catch (error) {
+                console.error("Could not fetch initial quorum:", error);
+                updateQuorumDisplay();
+            }
+            await fetchAttendees();
+        };
+
+        const fetchNames = async () => {
+            const lot = lotInput.value.trim();
+            const sp = strataPlanSelect.value;
+            companyRepGroup.style.display = 'none';
+            companyRepInput.value = '';
+            fetchedNames = [];
+            if (!lot || !sp) {
+                checkboxContainer.innerHTML = '<p>Select a Strata Plan and enter a Lot Number.</p>';
+                return;
+            }
+            checkboxContainer.innerHTML = '<p>Loading names...</p>';
+            try {
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}&sp=${sp}`);
+                const data = await response.json();
+                if (data.success && data.names.length > 0) {
+                    fetchedNames = data.names;
+                    checkboxContainer.innerHTML = '';
+                    data.names.forEach(name => {
+                        const div = document.createElement('div');
+                        div.className = 'checkbox-item';
+                        div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
+                        if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
+                            companyRepGroup.style.display = 'block';
+                        }
+                    });
+                } else if (data.success) {
+                    checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot Number.</p>';
+                } else { throw new Error(data.error); }
+            } catch (error) {
+                console.error('Error fetching names:', error);
+                checkboxContainer.innerHTML = '<p style="color: red;">Error fetching names. Please try again.</p>';
+            }
+        };
+
+        const handleFormSubmit = async (event) => {
+            event.preventDefault();
+            submitButton.disabled = true;
+            statusEl.textContent = 'Submitting...';
+            statusEl.style.color = '#333';
+
+            const sp = strataPlanSelect.value;
+            if (!sp) {
+                statusEl.textContent = 'Please select a Strata Plan.';
+                statusEl.style.color = 'red';
+                submitButton.disabled = false;
+                return;
+            }
+
+            const lot = lotInput.value.trim();
+            let selectedNames = Array.from(document.querySelectorAll('input[name="attendee"]:checked')).map(cb => cb.value);
+            const isFinancial = financialCheckbox.checked;
+            const isProxy = proxyCheckbox.checked;
+            const companyRep = companyRepInput.value.trim();
+            const proxyHolderLot = proxyHolderLotInput.value.trim();
+
+            if (isProxy) {
+                if (!proxyHolderLot) {
+                    statusEl.textContent = 'Please enter the Lot Number holding the proxy.';
+                    statusEl.style.color = 'red';
+                    submitButton.disabled = false;
+                    return;
+                }
+                selectedNames = [];
+            } else {
+                if (selectedNames.length === 0 && fetchedNames.length > 0) {
+                    const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0]);
+                    if (isCompany) selectedNames = [fetchedNames[0]];
+                }
+                if (selectedNames.length === 0) {
+                    statusEl.textContent = 'Please select at least one owner.';
+                    statusEl.style.color = 'red';
+                    submitButton.disabled = false;
+                    return;
+                }
+            }
+
+            try {
+                statusEl.textContent = 'Checking for existing columns...';
+                const checkResponse = await fetch(`${APPS_SCRIPT_URL}?action=checkDate&sp=${sp}`);
+                const checkData = await checkResponse.json();
+                
+                let meetingName = null;
+                if (checkData.success && !checkData.dateExists) {
+                    meetingName = window.prompt("Columns for today's date were not found.\nPlease enter the meeting name (e.g., EGM, AGM):");
+                    if (!meetingName) {
+                        statusEl.textContent = "Submission cancelled.";
+                        submitButton.disabled = false;
+                        return;
+                    }
+                } else if (!checkData.success) { throw new Error(checkData.error); }
+
+                statusEl.textContent = 'Submitting attendance...';
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({ 
+                        action: 'submit', lot: lot, names: selectedNames, 
+                        financial: isFinancial, proxyHolderLot: proxyHolderLot, 
+                        meetingName: meetingName, companyRep: companyRep, sp: sp
+                    })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    statusEl.textContent = 'Submission successful!';
+                    statusEl.style.color = 'green';
+                    updateQuorumDisplay(result.attendanceCount, result.totalLots);
+                    fetchAttendees();
+                    form.reset();
+                    companyRepGroup.style.display = 'none';
+                    proxyHolderGroup.style.display = 'none';
+                    checkboxContainer.innerHTML = '<p>Select a Strata Plan and enter a Lot Number.</p>';
+                } else { throw new Error(result.error); }
+            } catch (error) {
+                console.error('Submission Error:', error);
+                statusEl.textContent = `Submission failed: ${error.message}`;
+                statusEl.style.color = 'red';
+            } finally {
+                submitButton.disabled = false;
+            }
+        };
+
+        proxyCheckbox.addEventListener('change', () => {
+            if (proxyCheckbox.checked) {
+                proxyHolderGroup.style.display = 'block';
+                checkboxContainer.style.display = 'none';
+                companyRepGroup.style.display = 'none';
+            } else {
+                proxyHolderGroup.style.display = 'none';
+                checkboxContainer.style.display = 'block';
+                if (fetchedNames.length > 0 && /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0])) {
+                    companyRepGroup.style.display = 'block';
+                }
+            }
+        });
+
+        strataPlanSelect.addEventListener('change', (e) => {
+            setCookie('selectedSP', e.target.value, 0.25);
+            fetchInitialData();
+        });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await populateStrataPlans();
+            fetchInitialData();
+        });
         
-        // All other functions (handleDelete, renderAttendeeTable, etc.) would be added back here.
-        // For now, we are just testing the dropdown.
-
-        document.addEventListener('DOMContentLoaded', populateStrataPlans);
-
+        lotInput.addEventListener('blur', fetchNames);
+        form.addEventListener('submit', handleFormSubmit);
+        setInterval(fetchAttendees, 90000);
     </script>
 
 </body>
