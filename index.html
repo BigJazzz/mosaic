@@ -151,6 +151,7 @@
             modalConfirmBtn.textContent = confirmText;
             modalCancelBtn.textContent = cancelText;
             modal.style.display = 'flex';
+            if (showInput) modalInput.focus();
             return new Promise(resolve => {
                 modalResolve = resolve;
             });
@@ -162,6 +163,14 @@
         modalCancelBtn.addEventListener('click', () => {
             modal.style.display = 'none';
             if (modalResolve) modalResolve({ confirmed: false, value: null });
+        });
+        
+        // NEW: Add event listener for 'Enter' key on modal input
+        modalInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent default form submission behavior
+                modalConfirmBtn.click(); // Trigger the confirm button's click event
+            }
         });
 
         // --- Rendering Functions ---
