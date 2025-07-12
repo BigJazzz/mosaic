@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v2.1 (fetchNames debug)");
+        console.info("Attendance Form Code - v2.2 (checkbox display fix)");
     </script>
 </head>
 <body>
@@ -106,7 +106,7 @@
         
         let fetchedNames = [];
 
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlZqUOoOIACmo4RLgG2GzcAHfJy2KILQ__jdEQn1dRm0yan8pybuKshJeHScmLYSavxA/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
         const setCookie = (name, value, days) => {
             let expires = "";
@@ -274,15 +274,7 @@
             checkboxContainer.innerHTML = '<p>Loading names...</p>';
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}&sp=${sp}`);
-                
-                // --- NEW LOGGING ---
-                console.log("Received response from server. Status:", response.status);
-                const responseText = await response.text();
-                console.log("Raw response text from server:", responseText);
-                // --- END NEW LOGGING ---
-
-                const data = JSON.parse(responseText); // Manually parse the text
-
+                const data = await response.json();
                 if (data.success && data.names.length > 0) {
                     fetchedNames = data.names;
                     checkboxContainer.innerHTML = '';
@@ -290,6 +282,8 @@
                         const div = document.createElement('div');
                         div.className = 'checkbox-item';
                         div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
+                        // This is the corrected line:
+                        checkboxContainer.appendChild(div);
                         if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
                             companyRepGroup.style.display = 'block';
                         }
