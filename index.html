@@ -133,7 +133,7 @@
 
         // --- State & Constants ---
         let fetchedNames = [];
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlZqUOoOIACmo4RLgG2GzcAHfJy2KILQ__jdEQn1dRm0yan8pybuKshJeHScmLYSavxA/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
         // --- Modal Logic ---
         let modalResolve = null;
@@ -206,16 +206,21 @@
                 const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
                 let ownerRepName = '';
                 let companyName = '';
+                let rowColor = '#d4e3c1'; // Default color for individual owners
+
                 if (isProxy) {
                     ownerRepName = attendee.name;
+                    rowColor = '#c1e1e3'; // Light blue for proxies
                 } else if (isCompany) {
                     const parts = attendee.name.split(' - ');
                     companyName = parts[0].trim();
                     if (parts.length > 1) ownerRepName = parts[1].trim();
+                    rowColor = '#cbc1e3'; // Light purple for companies
                 } else {
                     ownerRepName = attendee.name;
                 }
                 const row = document.createElement('tr');
+                row.style.backgroundColor = rowColor; // Apply the color
                 row.innerHTML = `
                     <td>${attendee.lot}</td>
                     <td>${ownerRepName}</td>
