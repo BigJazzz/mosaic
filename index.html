@@ -6,7 +6,7 @@
     <title>Attendance Form</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 2rem; background-color: #f8f9fa; color: #333; }
-        .container { max-width: 600px; margin: auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px_10px rgba(0,0,0,0.1); }
+        .container { max-width: 600px; margin: auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
         h1 { font-size: 1.75rem; color: #333; margin: 0; flex-grow: 1; }
         #quorum-display { padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold; color: white; text-align: center; line-height: 1.2; }
@@ -96,7 +96,6 @@
         </div>
     </div>
 
-    <!-- Modal HTML -->
     <div id="custom-modal" class="modal-overlay">
         <div class="modal-content">
             <p id="modal-text"></p>
@@ -133,12 +132,16 @@
 
         // --- State & Constants ---
         let fetchedNames = [];
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlZqUOoOIACmo4RLgG2GzcAHfJy2KILQ__jdEQn1dRm0yan8pybuKshJeHScmLYSavxA/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
         // --- Modal Logic ---
         let modalResolve = null;
-        const showModal = (text, { showInput = false, confirmText = 'Confirm', cancelText = 'Cancel' } = {}) => {
-            modalText.textContent = text;
+        const showModal = (text, { showInput = false, confirmText = 'Confirm', cancelText = 'Cancel', isHtml = false } = {}) => {
+            if (isHtml) {
+                modalText.innerHTML = text;
+            } else {
+                modalText.textContent = text;
+            }
             modalInput.style.display = showInput ? 'block' : 'none';
             modalInput.value = '';
             modalConfirmBtn.textContent = confirmText;
@@ -197,276 +200,4 @@
             attendeeTableBody.innerHTML = '';
             personCountSpan.textContent = `(${personCount || 0} people)`;
             if (!attendees || attendees.length === 0) {
-                attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
-                return;
-            }
-            attendees.sort((a, b) => a.lot - b.lot);
-            attendees.forEach(attendee => {
-                const isProxy = String(attendee.name).startsWith('Proxy - Lot');
-                const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
-                let ownerRepName = '';
-                let companyName = '';
-                let rowColor = '#d4e3c1'; // Default color for individual owners
-
-                if (isProxy) {
-                    ownerRepName = attendee.name;
-                    rowColor = '#c1e1e3'; // Light blue for proxies
-                } else if (isCompany) {
-                    const parts = attendee.name.split(' - ');
-                    companyName = parts[0].trim();
-                    if (parts.length > 1) ownerRepName = parts[1].trim();
-                    rowColor = '#cbc1e3'; // Light purple for companies
-                } else {
-                    ownerRepName = attendee.name;
-                }
-                const row = document.createElement('tr');
-                row.style.backgroundColor = rowColor; // Apply the color
-                row.innerHTML = `
-                    <td>${attendee.lot}</td>
-                    <td>${ownerRepName}</td>
-                    <td>${companyName}</td>
-                    <td><button class="delete-btn" data-lot="${attendee.lot}">Delete</button></td>`;
-                attendeeTableBody.appendChild(row);
-            });
-        };
-
-        const updateQuorumDisplay = (count = 0, total = 0) => {
-            const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-            quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
-            quorumDisplay.style.backgroundColor = percentage >= 25 ? '#28a745' : '#dc3545';
-        };
-
-        // --- Data Fetching & API Calls ---
-        const populateStrataPlans = async () => {
-            try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
-                const data = await response.json();
-                if (data.success && data.plans) {
-                    renderStrataPlans(data.plans);
-                }
-            } catch (error) {
-                console.error("[CLIENT LOG] Could not fetch strata plans:", error);
-            }
-        };
-        
-        const fetchAttendees = async () => {
-            const sp = strataPlanSelect.value;
-            if (!sp) return;
-            try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`);
-                const data = await response.json();
-                if (data.success) {
-                    renderAttendeeTable(data.attendees, data.personCount);
-                }
-            } catch (error) { console.error("Could not fetch attendee list:", error); }
-        };
-
-        const fetchInitialData = async () => {
-            const sp = strataPlanSelect.value;
-            if (!sp) {
-                quorumDisplay.textContent = 'Select a plan';
-                quorumDisplay.style.backgroundColor = '#6c757d';
-                renderAttendeeTable([]);
-                personCountSpan.textContent = '';
-                return;
-            }
-            quorumDisplay.textContent = 'Loading...';
-            try {
-                const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`);
-                const quorumData = await quorumResponse.json();
-                if (quorumData.success) {
-                    updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
-                } else { updateQuorumDisplay(); }
-            } catch (error) {
-                console.error("Could not fetch initial quorum:", error);
-                updateQuorumDisplay();
-            }
-            await fetchAttendees();
-        };
-
-        const fetchNames = async () => {
-            const lot = lotInput.value.trim();
-            const sp = strataPlanSelect.value;
-            companyRepGroup.style.display = 'none';
-            companyRepInput.value = '';
-            fetchedNames = [];
-            if (!lot || !sp) {
-                checkboxContainer.innerHTML = '<p>Select a Strata Plan and enter a Lot Number.</p>';
-                return;
-            }
-            checkboxContainer.innerHTML = '<p>Loading names...</p>';
-            try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}&sp=${sp}`);
-                const data = await response.json();
-                if (data.success && data.names && data.names.length > 0) {
-                    fetchedNames = data.names;
-                    checkboxContainer.innerHTML = '';
-                    data.names.forEach(name => {
-                        const div = document.createElement('div');
-                        div.className = 'checkbox-item';
-                        div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
-                        if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
-                            companyRepGroup.style.display = 'block';
-                        }
-                        checkboxContainer.appendChild(div);
-                    });
-                } else if (data.success) {
-                    checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot Number.</p>';
-                } else { throw new Error(data.error || "Unknown server error."); }
-            } catch (error) {
-                console.error('Error fetching names:', error);
-                checkboxContainer.innerHTML = '<p style="color: red;">Error fetching names. Please try again.</p>';
-            }
-        };
-        
-        const handleDelete = async (lotNumber) => {
-            const sp = strataPlanSelect.value;
-            if (!sp) return;
-
-            const modalResponse = await showModal(`Are you sure you want to delete the attendance record for Lot ${lotNumber}?`);
-            if (modalResponse.confirmed) {
-                statusEl.textContent = `Deleting Lot ${lotNumber}...`;
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL, {
-                        method: 'POST',
-                        mode: 'cors',
-                        headers: { 'Content-Type': 'text/plain' }, // Required for simple POST to GAS
-                        body: JSON.stringify({ action: 'delete', lot: lotNumber, sp: sp })
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                        statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-                        fetchInitialData();
-                    } else { throw new Error(result.error); }
-                } catch (error) {
-                    console.error('Deletion Error:', error);
-                    statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
-                }
-            }
-        };
-
-        // --- Event Handlers ---
-        const handleFormSubmit = async (event) => {
-            event.preventDefault();
-            submitButton.disabled = true;
-            statusEl.textContent = 'Submitting...';
-            statusEl.style.color = '#333';
-
-            const sp = strataPlanSelect.value;
-            if (!sp) {
-                statusEl.textContent = 'Please select a Strata Plan.';
-                statusEl.style.color = 'red';
-                submitButton.disabled = false;
-                return;
-            }
-
-            const lot = lotInput.value.trim();
-            let selectedNames = Array.from(document.querySelectorAll('input[name="attendee"]:checked')).map(cb => cb.value);
-            const isFinancial = financialCheckbox.checked;
-            const isProxy = proxyCheckbox.checked;
-            const companyRep = companyRepInput.value.trim();
-            const proxyHolderLot = proxyHolderLotInput.value.trim();
-
-            if (isProxy) {
-                if (!proxyHolderLot) {
-                    statusEl.textContent = 'Please enter the Lot Number holding the proxy.';
-                    statusEl.style.color = 'red';
-                    submitButton.disabled = false;
-                    return;
-                }
-                selectedNames = [];
-            } else {
-                if (selectedNames.length === 0 && fetchedNames.length > 0) {
-                    const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0]);
-                    if (isCompany) selectedNames = [fetchedNames[0]];
-                }
-                if (selectedNames.length === 0) {
-                    statusEl.textContent = 'Please select at least one owner.';
-                    statusEl.style.color = 'red';
-                    submitButton.disabled = false;
-                    return;
-                }
-            }
-
-            try {
-                statusEl.textContent = 'Checking for existing columns...';
-                const checkResponse = await fetch(`${APPS_SCRIPT_URL}?action=checkDate&sp=${sp}`);
-                const checkData = await checkResponse.json();
-                
-                let meetingName = null;
-                if (checkData.success && !checkData.dateExists) {
-                    const modalResponse = await showModal("Columns for today's date were not found. Please enter the meeting name (e.g., EGM, AGM):", { showInput: true });
-                    if (!modalResponse.confirmed || !modalResponse.value) {
-                        statusEl.textContent = "Submission cancelled.";
-                        submitButton.disabled = false;
-                        return;
-                    }
-                    meetingName = modalResponse.value;
-                } else if (!checkData.success) { throw new Error(checkData.error); }
-
-                statusEl.textContent = 'Submitting attendance...';
-                const postBody = { 
-                    action: 'submit', lot, names: selectedNames, 
-                    financial: isFinancial, proxyHolderLot, 
-                    meetingName, companyRep, sp
-                };
-                const response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(postBody)
-                });
-                const result = await response.json();
-
-                if (result.success) {
-                    statusEl.textContent = 'Submission successful!';
-                    statusEl.style.color = 'green';
-                    updateQuorumDisplay(result.attendanceCount, result.totalLots);
-                    fetchAttendees();
-                    form.reset();
-                    companyRepGroup.style.display = 'none';
-                    proxyHolderGroup.style.display = 'none';
-                    checkboxContainer.innerHTML = '<p>Select a Strata Plan and enter a Lot Number.</p>';
-                } else { throw new Error(result.error); }
-            } catch (error) {
-                console.error('Submission Error:', error);
-                statusEl.textContent = `Submission failed: ${error.message}`;
-                statusEl.style.color = 'red';
-            } finally {
-                submitButton.disabled = false;
-            }
-        };
-
-        // --- Event Listeners ---
-        proxyCheckbox.addEventListener('change', () => {
-            const isChecked = proxyCheckbox.checked;
-            proxyHolderGroup.style.display = isChecked ? 'block' : 'none';
-            checkboxContainer.style.display = isChecked ? 'none' : 'block';
-            companyRepGroup.style.display = 'none'; // Always hide company rep when proxy changes
-            if (!isChecked && fetchedNames.length > 0 && /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0])) {
-                companyRepGroup.style.display = 'block';
-            }
-        });
-
-        strataPlanSelect.addEventListener('change', (e) => {
-            setCookie('selectedSP', e.target.value, 0.25);
-            fetchInitialData();
-        });
-        
-        attendeeTableBody.addEventListener('click', (e) => {
-            if (e.target && e.target.classList.contains('delete-btn')) {
-                const lotNumber = e.target.dataset.lot;
-                handleDelete(lotNumber);
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', async () => {
-            await populateStrataPlans();
-            fetchInitialData();
-        });
-        
-        lotInput.addEventListener('blur', fetchNames);
-        form.addEventListener('submit', handleFormSubmit);
-        setInterval(fetchAttendees, 90000); // Refresh attendee list every 90 seconds
-    </script>
-
-</body>
-</html>
+                attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-
