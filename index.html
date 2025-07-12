@@ -5,30 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Attendance Form</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 2rem; background-color: #f8f9fa; }
-        .container { max-width: 600px; margin: auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-        h1 { text-align: center; color: #333; margin: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 2rem; background-color: #f8f9fa; color: #333; }
+        .container { max-width: 600px; margin: auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px_10px rgba(0,0,0,0.1); }
+        .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
+        h1 { font-size: 1.75rem; color: #333; margin: 0; flex-grow: 1; }
         #quorum-display { padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold; color: white; text-align: center; line-height: 1.2; }
         #quorum-display small { font-weight: normal; font-size: 0.8em; }
         .form-group { margin-bottom: 1rem; }
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        input[type="text"], select { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1rem; }
+        input[type="text"], select { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1rem; }
         #checkbox-container { border: 1px solid #eee; padding: 1rem; border-radius: 4px; min-height: 50px; }
         .checkbox-item { display: block; margin-bottom: 0.5rem; }
-        button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; }
-        button:disabled { background-color: #aaa; }
-        #status { text-align: center; margin-top: 1rem; font-weight: bold; }
+        button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; transition: background-color 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #aaa; cursor: not-allowed; }
+        #status { text-align: center; margin-top: 1rem; font-weight: bold; min-height: 1.2em; }
         .attendee-section { margin-top: 2rem; }
-        .attendee-section h2 { display: flex; justify-content: space-between; align-items: center;}
-        .attendee-table { width: 100%; border-collapse: collapse; }
-        .attendee-table th, .attendee-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
+        .attendee-section h2 { display: flex; justify-content: space-between; align-items: center; }
+        .attendee-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .attendee-table th, .attendee-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; vertical-align: middle; }
         .attendee-table th { background-color: #f2f2f2; }
+        .delete-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
         #company-rep-group, #proxy-holder-group { display: none; }
+        
+        /* Modal Styles */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .modal-content p { margin-top: 0; }
+        .modal-input { width: 100%; padding: 0.5rem; margin-top: 1rem; border: 1px solid #ccc; border-radius: 4px; }
+        .modal-buttons { margin-top: 1.5rem; text-align: right; }
+        .modal-buttons button { width: auto; margin-left: 0.5rem; padding: 0.5rem 1rem; }
+        .modal-confirm-btn { background-color: #28a745; }
+        .modal-cancel-btn { background-color: #6c757d; }
     </style>
-    <script>
-        console.info("Attendance Form Code - v2.1");
-    </script>
 </head>
 <body>
 
@@ -59,7 +68,7 @@
                 <label for="company-rep">Company Representative</label>
                 <input type="text" id="company-rep" placeholder="Enter representative's name (optional)">
             </div>
-             <div class="form-group" id="proxy-holder-group">
+            <div class="form-group" id="proxy-holder-group">
                 <label for="proxy-holder-lot">Proxy Holder Lot Number</label>
                 <input type="text" id="proxy-holder-lot" placeholder="Enter lot number holding the proxy">
             </div>
@@ -79,7 +88,7 @@
                         <th>Lot</th>
                         <th>Owner/Rep</th>
                         <th>Company</th>
-                        <th>Delete?</th>
+                        <th>Delete</th>
                     </tr>
                 </thead>
                 <tbody id="attendee-table-body"></tbody>
@@ -87,7 +96,20 @@
         </div>
     </div>
 
+    <!-- Modal HTML -->
+    <div id="custom-modal" class="modal-overlay">
+        <div class="modal-content">
+            <p id="modal-text"></p>
+            <input type="text" id="modal-input" class="modal-input" style="display: none;">
+            <div class="modal-buttons">
+                <button id="modal-cancel-btn" class="modal-cancel-btn">Cancel</button>
+                <button id="modal-confirm-btn" class="modal-confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // --- DOM Elements ---
         const lotInput = document.getElementById('lot-number');
         const checkboxContainer = document.getElementById('checkbox-container');
         const form = document.getElementById('attendance-form');
@@ -103,11 +125,39 @@
         const proxyHolderGroup = document.getElementById('proxy-holder-group');
         const proxyHolderLotInput = document.getElementById('proxy-holder-lot');
         const strataPlanSelect = document.getElementById('strata-plan-select');
-        
-        let fetchedNames = [];
+        const modal = document.getElementById('custom-modal');
+        const modalText = document.getElementById('modal-text');
+        const modalInput = document.getElementById('modal-input');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
 
+        // --- State & Constants ---
+        let fetchedNames = [];
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlZqUOoOIACmo4RLgG2GzcAHfJy2KILQ__jdEQn1dRm0yan8pybuKshJeHScmLYSavxA/exec';
 
+        // --- Modal Logic ---
+        let modalResolve = null;
+        const showModal = (text, { showInput = false, confirmText = 'Confirm', cancelText = 'Cancel' } = {}) => {
+            modalText.textContent = text;
+            modalInput.style.display = showInput ? 'block' : 'none';
+            modalInput.value = '';
+            modalConfirmBtn.textContent = confirmText;
+            modalCancelBtn.textContent = cancelText;
+            modal.style.display = 'flex';
+            return new Promise(resolve => {
+                modalResolve = resolve;
+            });
+        };
+        modalConfirmBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+            if (modalResolve) modalResolve({ confirmed: true, value: modalInput.value });
+        });
+        modalCancelBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+            if (modalResolve) modalResolve({ confirmed: false, value: null });
+        });
+
+        // --- Cookie Helpers ---
         const setCookie = (name, value, days) => {
             let expires = "";
             if (days) {
@@ -116,7 +166,7 @@
                 expires = "; expires=" + date.toUTCString();
             }
             document.cookie = name + "=" + (value || "") + expires + "; path=/";
-        }
+        };
         const getCookie = (name) => {
             const nameEQ = name + "=";
             const ca = document.cookie.split(';');
@@ -126,10 +176,11 @@
                 if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
             }
             return null;
-        }
+        };
 
+        // --- Rendering Functions ---
         const renderStrataPlans = (plans) => {
-            if (!plans) return;
+            if (!plans) { console.error("[CLIENT LOG] renderStrataPlans was called with invalid data."); return; }
             strataPlanSelect.innerHTML = '<option value="">Select a plan...</option>';
             plans.sort((a, b) => a.sp - b.sp);
             plans.forEach(plan => {
@@ -139,49 +190,7 @@
                 strataPlanSelect.appendChild(option);
             });
             const savedSP = getCookie('selectedSP');
-            if (savedSP) {
-                strataPlanSelect.value = savedSP;
-            }
-        };
-        
-        const populateStrataPlans = async () => {
-            const cachedPlansJSON = getCookie('strataPlanList');
-            if (cachedPlansJSON) {
-                renderStrataPlans(JSON.parse(cachedPlansJSON));
-                return;
-            }
-            try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
-                const data = await response.json();
-                if (data.success && data.plans) {
-                    setCookie('strataPlanList', JSON.stringify(data.plans), 0.25);
-                    renderStrataPlans(data.plans);
-                }
-            } catch (error) {
-                console.error("Could not fetch strata plans:", error);
-            }
-        };
-
-        const handleDelete = async (lotNumber) => {
-            const sp = strataPlanSelect.value;
-            if (!sp) { alert("Please select a Strata Plan first."); return; }
-            if (confirm(`Are you sure you want to delete the attendance record for Lot ${lotNumber}?`)) {
-                statusEl.textContent = `Deleting Lot ${lotNumber}...`;
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL, {
-                        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                        body: JSON.stringify({ action: 'delete', lot: lotNumber, sp: sp })
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                        statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-                        fetchInitialData();
-                    } else { throw new Error(result.error); }
-                } catch (error) {
-                    console.error('Deletion Error:', error);
-                    statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
-                }
-            }
+            if (savedSP) strataPlanSelect.value = savedSP;
         };
 
         const renderAttendeeTable = (attendees, personCount) => {
@@ -195,26 +204,23 @@
             attendees.forEach(attendee => {
                 const isProxy = String(attendee.name).startsWith('Proxy - Lot');
                 const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
-                
                 let ownerRepName = '';
                 let companyName = '';
-                let rowColor = '#d4e3c1';
-                
                 if (isProxy) {
-                    ownerRepName = attendee.name; // Moved to Owner/Rep column
-                    rowColor = '#c1e1e3';
+                    ownerRepName = attendee.name;
                 } else if (isCompany) {
                     const parts = attendee.name.split(' - ');
                     companyName = parts[0].trim();
                     if (parts.length > 1) ownerRepName = parts[1].trim();
-                    rowColor = '#cbc1e3';
                 } else {
                     ownerRepName = attendee.name;
                 }
-                
                 const row = document.createElement('tr');
-                row.style.backgroundColor = rowColor;
-                row.innerHTML = `<td>${attendee.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>`;
+                row.innerHTML = `
+                    <td>${attendee.lot}</td>
+                    <td>${ownerRepName}</td>
+                    <td>${companyName}</td>
+                    <td><button class="delete-btn" data-lot="${attendee.lot}">Delete</button></td>`;
                 attendeeTableBody.appendChild(row);
             });
         };
@@ -222,13 +228,22 @@
         const updateQuorumDisplay = (count = 0, total = 0) => {
             const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
             quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
-            if (percentage >= 25) {
-                quorumDisplay.style.backgroundColor = '#28a745';
-            } else {
-                quorumDisplay.style.backgroundColor = '#dc3545';
-            }
+            quorumDisplay.style.backgroundColor = percentage >= 25 ? '#28a745' : '#dc3545';
         };
 
+        // --- Data Fetching & API Calls ---
+        const populateStrataPlans = async () => {
+            try {
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
+                const data = await response.json();
+                if (data.success && data.plans) {
+                    renderStrataPlans(data.plans);
+                }
+            } catch (error) {
+                console.error("[CLIENT LOG] Could not fetch strata plans:", error);
+            }
+        };
+        
         const fetchAttendees = async () => {
             const sp = strataPlanSelect.value;
             if (!sp) return;
@@ -249,7 +264,7 @@
                 renderAttendeeTable([]);
                 personCountSpan.textContent = '';
                 return;
-            };
+            }
             quorumDisplay.textContent = 'Loading...';
             try {
                 const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`);
@@ -278,7 +293,7 @@
             try {
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getNames&lot=${lot}&sp=${sp}`);
                 const data = await response.json();
-                if (data.success && data.names.length > 0) {
+                if (data.success && data.names && data.names.length > 0) {
                     fetchedNames = data.names;
                     checkboxContainer.innerHTML = '';
                     data.names.forEach(name => {
@@ -288,16 +303,44 @@
                         if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
                             companyRepGroup.style.display = 'block';
                         }
+                        checkboxContainer.appendChild(div);
                     });
                 } else if (data.success) {
                     checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot Number.</p>';
-                } else { throw new Error(data.error); }
+                } else { throw new Error(data.error || "Unknown server error."); }
             } catch (error) {
                 console.error('Error fetching names:', error);
                 checkboxContainer.innerHTML = '<p style="color: red;">Error fetching names. Please try again.</p>';
             }
         };
+        
+        const handleDelete = async (lotNumber) => {
+            const sp = strataPlanSelect.value;
+            if (!sp) return;
 
+            const modalResponse = await showModal(`Are you sure you want to delete the attendance record for Lot ${lotNumber}?`);
+            if (modalResponse.confirmed) {
+                statusEl.textContent = `Deleting Lot ${lotNumber}...`;
+                try {
+                    const response = await fetch(APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain' }, // Required for simple POST to GAS
+                        body: JSON.stringify({ action: 'delete', lot: lotNumber, sp: sp })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
+                        fetchInitialData();
+                    } else { throw new Error(result.error); }
+                } catch (error) {
+                    console.error('Deletion Error:', error);
+                    statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
+                }
+            }
+        };
+
+        // --- Event Handlers ---
         const handleFormSubmit = async (event) => {
             event.preventDefault();
             submitButton.disabled = true;
@@ -347,22 +390,24 @@
                 
                 let meetingName = null;
                 if (checkData.success && !checkData.dateExists) {
-                    meetingName = window.prompt("Columns for today's date were not found.\nPlease enter the meeting name (e.g., EGM, AGM):");
-                    if (!meetingName) {
+                    const modalResponse = await showModal("Columns for today's date were not found. Please enter the meeting name (e.g., EGM, AGM):", { showInput: true });
+                    if (!modalResponse.confirmed || !modalResponse.value) {
                         statusEl.textContent = "Submission cancelled.";
                         submitButton.disabled = false;
                         return;
                     }
+                    meetingName = modalResponse.value;
                 } else if (!checkData.success) { throw new Error(checkData.error); }
 
                 statusEl.textContent = 'Submitting attendance...';
+                const postBody = { 
+                    action: 'submit', lot, names: selectedNames, 
+                    financial: isFinancial, proxyHolderLot, 
+                    meetingName, companyRep, sp
+                };
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify({ 
-                        action: 'submit', lot: lot, names: selectedNames, 
-                        financial: isFinancial, proxyHolderLot: proxyHolderLot, 
-                        meetingName: meetingName, companyRep: companyRep, sp: sp
-                    })
+                    body: JSON.stringify(postBody)
                 });
                 const result = await response.json();
 
@@ -385,23 +430,27 @@
             }
         };
 
+        // --- Event Listeners ---
         proxyCheckbox.addEventListener('change', () => {
-            if (proxyCheckbox.checked) {
-                proxyHolderGroup.style.display = 'block';
-                checkboxContainer.style.display = 'none';
-                companyRepGroup.style.display = 'none';
-            } else {
-                proxyHolderGroup.style.display = 'none';
-                checkboxContainer.style.display = 'block';
-                if (fetchedNames.length > 0 && /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0])) {
-                    companyRepGroup.style.display = 'block';
-                }
+            const isChecked = proxyCheckbox.checked;
+            proxyHolderGroup.style.display = isChecked ? 'block' : 'none';
+            checkboxContainer.style.display = isChecked ? 'none' : 'block';
+            companyRepGroup.style.display = 'none'; // Always hide company rep when proxy changes
+            if (!isChecked && fetchedNames.length > 0 && /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0])) {
+                companyRepGroup.style.display = 'block';
             }
         });
 
         strataPlanSelect.addEventListener('change', (e) => {
             setCookie('selectedSP', e.target.value, 0.25);
             fetchInitialData();
+        });
+        
+        attendeeTableBody.addEventListener('click', (e) => {
+            if (e.target && e.target.classList.contains('delete-btn')) {
+                const lotNumber = e.target.dataset.lot;
+                handleDelete(lotNumber);
+            }
         });
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -411,7 +460,7 @@
         
         lotInput.addEventListener('blur', fetchNames);
         form.addEventListener('submit', handleFormSubmit);
-        setInterval(fetchAttendees, 90000);
+        setInterval(fetchAttendees, 90000); // Refresh attendee list every 90 seconds
     </script>
 
 </body>
