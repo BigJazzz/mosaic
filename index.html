@@ -27,7 +27,7 @@
         #company-rep-group, #proxy-holder-group { display: none; }
     </style>
     <script>
-        console.info("Attendance Form Code - v2.2 (checkbox display fix)");
+        console.info("Attendance Form Code - v2.1");
     </script>
 </head>
 <body>
@@ -106,7 +106,7 @@
         
         let fetchedNames = [];
 
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlZqUOoOIACmo4RLgG2GzcAHfJy2KILQ__jdEQn1dRm0yan8pybuKshJeHScmLYSavxA/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAzm_TuLcMzAsZuRXdaQ5-lTW3dtNIal2OO2CzkAsWmgT1BraYCLLB29nIyOFsaYFC-g/exec';
 
         const setCookie = (name, value, days) => {
             let expires = "";
@@ -195,11 +195,13 @@
             attendees.forEach(attendee => {
                 const isProxy = String(attendee.name).startsWith('Proxy - Lot');
                 const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
+                
                 let ownerRepName = '';
                 let companyName = '';
                 let rowColor = '#d4e3c1';
+                
                 if (isProxy) {
-                    companyName = attendee.name;
+                    ownerRepName = attendee.name; // Moved to Owner/Rep column
                     rowColor = '#c1e1e3';
                 } else if (isCompany) {
                     const parts = attendee.name.split(' - ');
@@ -209,6 +211,7 @@
                 } else {
                     ownerRepName = attendee.name;
                 }
+                
                 const row = document.createElement('tr');
                 row.style.backgroundColor = rowColor;
                 row.innerHTML = `<td>${attendee.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td><input type="checkbox" onchange="handleDelete('${attendee.lot}')"></td>`;
@@ -282,8 +285,6 @@
                         const div = document.createElement('div');
                         div.className = 'checkbox-item';
                         div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
-                        // This is the corrected line:
-                        checkboxContainer.appendChild(div);
                         if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) {
                             companyRepGroup.style.display = 'block';
                         }
