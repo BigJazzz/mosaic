@@ -1,4 +1,3 @@
-
 // --- DOM Elements ---
 const lotInput = document.getElementById('lot-number');
 const checkboxContainer = document.getElementById('checkbox-container');
