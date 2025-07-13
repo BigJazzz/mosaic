@@ -109,42 +109,6 @@
             </div>
         </div>
     </div>
-
-    <script>
-    const strataPlanSelect = document.getElementById('strata-plan-select');
-    // UPDATED: Using your new Web App URL
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwccn5PyK9fGhPtlXOlLTQp7JQNxyxDHxTLOlYE8_Iy4Fm9sGfCmF5-P9edv50edRhnVw/exec';
-
-    const populateStrataPlans = async () => {
-        console.log("--- Step 1: Attempting to fetch strata plans ---");
-        strataPlanSelect.disabled = true;
-        strataPlanSelect.innerHTML = '<option value="">Loading plans...</option>';
-        try {
-            const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
-            if (!response.ok) {
-                throw new Error(`Network response was not ok: ${response.statusText}`);
-            }
-            const data = await response.json();
-             console.log("Server response:", data);
-
-            if (data.success && data.plans) {
-                strataPlanSelect.innerHTML = '<option value="">Select a plan...</option>';
-                data.plans.forEach(plan => {
-                    const option = document.createElement('option');
-                    option.value = plan.sp;
-                    option.textContent = `${plan.sp} - ${plan.suburb}`;
-                    strataPlanSelect.appendChild(option);
-                });
-                strataPlanSelect.disabled = false;
-                console.log("Success: Dropdown populated!");
-            } else {
-                throw new Error(data.error || "Server did not return success or plans.");
-            }
-        } catch (error) {
-            strataPlanSelect.innerHTML = `<option>Error loading plans.</option>`;
-            console.error("Failure: A critical error occurred.", error);
-        }
-    };
-
-    document.addEventListener('DOMContentLoaded', populateStrataPlans);
-</script>
+    <script src="myscripts.js"></script>
+</body>
+</html>
