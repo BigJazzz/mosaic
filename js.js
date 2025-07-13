@@ -398,14 +398,18 @@ proxyCheckbox.addEventListener('change', () => {
         companyRepGroup.style.display = 'block';
     }
 });
-strataPlanSelect.addEventListener('change', (e) => {
+strataPlanSelect.addEventListener('change', async (e) => {
     const sp = e.target.value;
+    console.log(`--- Event: Strata plan changed to ${sp} ---`);
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
+    
     resetUiOnPlanChange();
-    clearStrataCache();
+
     if (sp) {
-        fetchInitialData();
-        cacheAllNames(sp);
+        // First, wait for the name cache to load
+        await cacheAllNames(sp);
+        // Then, fetch the current attendee and quorum data
+        await fetchInitialData();
     }
 });
 attendeeTableBody.addEventListener('click', (e) => {
@@ -419,8 +423,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await populateStrataPlans();
     const initialSP = strataPlanSelect.value;
     if (initialSP) {
-      await fetchInitialData();
-      await cacheAllNames(initialSP);
+        // First, wait for the name cache to load
+        await cacheAllNames(initialSP);
+        // Then, fetch the current attendee and quorum data
+        await fetchInitialData();
     }
 });
 lotInput.addEventListener('blur', fetchNames);
