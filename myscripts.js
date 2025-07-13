@@ -23,14 +23,14 @@ const modalCancelBtn = document.getElementById('modal-cancel-btn');
 
 // --- State & Constants ---
 let fetchedNames = [];
-let strataPlanCache = null;
+let strataPlanCache = null; 
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwccn5PyK9fGhPtlXOlLTQp7JQNxyxDHxTLOlYE8_Iy4Fm9sGfCmF5-P9edv50edRhnVw/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 // --- Modal Logic ---
 let modalResolve = null;
 const showModal = (text, { showInput = false, confirmText = 'Confirm', cancelText = 'Cancel', isHtml = false } = {}) => {
-    if (isHtml) { modalText.innerHTML = text; }
+    if (isHtml) { modalText.innerHTML = text; } 
     else { modalText.textContent = text; }
     modalInput.style.display = showInput ? 'block' : 'none';
     modalInput.value = '';
@@ -50,7 +50,7 @@ modalCancelBtn.addEventListener('click', () => {
 });
 modalInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
-        event.preventDefault();
+        event.preventDefault(); 
         modalConfirmBtn.click();
     }
 });
@@ -98,8 +98,9 @@ const cacheAllNames = async (sp) => {
             localStorage.setItem(cacheKey, JSON.stringify(newCacheItem));
             lotInput.disabled = false;
             checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
-            console.log(`[CACHE] Successfully fetched and cached data for SP ${sp}.`);
-        } else { throw new Error(data.error); }
+        } else {
+            throw new Error(data.error);
+        }
     } catch (error) {
          console.error('[CACHE] Failed to cache strata plan data:', error);
          checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
@@ -146,7 +147,7 @@ const renderAttendeeTable = (attendees, personCount) => {
         let ownerRepName = '';
         let companyName = '';
         let rowColor = '#d4e3c1';
-        if (isProxy) { ownerRepName = attendee.name; rowColor = '#c1e1e3'; }
+        if (isProxy) { ownerRepName = attendee.name; rowColor = '#c1e1e3'; } 
         else if (isCompany) {
             const parts = attendee.name.split(' - ');
             companyName = parts[0].trim();
@@ -183,18 +184,7 @@ const populateStrataPlans = async () => {
     }
 };
 
-const fetchAttendees = async () => {
-    const sp = strataPlanSelect.value;
-    if (!sp) return;
-    try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`);
-        const data = await response.json();
-        if (data.success) {
-            renderAttendeeTable(data.attendees, data.personCount);
-        }
-    } catch (error) { console.error("Could not fetch attendee list:", error); }
-};
-
+// UPDATED: This function now fetches both quorum and attendees
 const fetchInitialData = async () => {
     const sp = strataPlanSelect.value;
     console.log(`[DATA] Starting to fetch initial data for SP: ${sp}`);
@@ -214,10 +204,10 @@ const fetchInitialData = async () => {
         if (quorumData.success) {
             updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
         } else {
-            updateQuorumDisplay(); // Reset to 0
+            updateQuorumDisplay();
         }
 
-        // Fetch Attendees (now inside the same try...catch block)
+        // Fetch Attendees
         console.log("[DATA] Fetching attendees...");
         const attendeesResponse = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`);
         const attendeesData = await attendeesResponse.json();
@@ -225,7 +215,7 @@ const fetchInitialData = async () => {
         if (attendeesData.success) {
             renderAttendeeTable(attendeesData.attendees, attendeesData.personCount);
         } else {
-           renderAttendeeTable([], 0); // Clear table on failure
+           renderAttendeeTable([], 0);
         }
 
     } catch (error) {
@@ -235,8 +225,7 @@ const fetchInitialData = async () => {
     }
 };
 
-// You can now REMOVE the old fetchAttendees function, as its logic is included above.
-const fetchAttendees = async () => { /* This function is no longer needed */ };
+// DELETED: The old fetchAttendees function is no longer needed.
 
 const fetchNames = () => {
     const lot = lotInput.value.trim();
@@ -393,7 +382,7 @@ const handleFormSubmit = async (event) => {
             statusEl.textContent = 'Submission successful!';
             statusEl.style.color = 'green';
             updateQuorumDisplay(result.attendanceCount, result.totalLots);
-            fetchAttendees();
+            fetchInitialData(); // UPDATED: Changed from fetchAttendees()
             form.reset();
             companyRepGroup.style.display = 'none';
             proxyHolderGroup.style.display = 'none';
@@ -450,4 +439,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 lotInput.addEventListener('blur', fetchNames);
 form.addEventListener('submit', handleFormSubmit);
-setInterval(fetchAttendees, 90000);
+setInterval(fetchInitialData, 90000); // Changed to fetchInitialData for consistency
