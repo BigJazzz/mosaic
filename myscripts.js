@@ -57,7 +57,6 @@ modalInput.addEventListener('keydown', (event) => {
 
 // --- Caching Logic ---
 const clearStrataCache = () => {
-    console.log("[CACHE] Clearing all strata-related keys from local storage.");
     Object.keys(localStorage).forEach(key => {
         if (key.startsWith('strata_')) {
             localStorage.removeItem(key);
@@ -77,18 +76,15 @@ const cacheAllNames = async (sp) => {
         const { timestamp, names } = JSON.parse(cachedItem);
         const isCacheValid = (new Date().getTime() - timestamp) < CACHE_DURATION_MS;
         if (isCacheValid) {
-            console.log(`[CACHE] Found valid cache for SP ${sp}. Loading from local storage.`);
             strataPlanCache = names;
             lotInput.disabled = false;
             checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
             return;
         } else {
-            console.log(`[CACHE] Cache for SP ${sp} is expired. Removing.`);
             localStorage.removeItem(cacheKey);
         }
     }
 
-    console.log(`[CACHE] No valid cache for SP ${sp}. Fetching from server...`);
     try {
         const response = await fetch(`${APPS_SCRIPT_URL}?action=getAllNamesForPlan&sp=${sp}`);
         const data = await response.json();
@@ -102,14 +98,12 @@ const cacheAllNames = async (sp) => {
             throw new Error(data.error);
         }
     } catch (error) {
-         console.error('[CACHE] Failed to cache strata plan data:', error);
          checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
     }
 };
 
 // --- UI & Rendering ---
 const resetUiOnPlanChange = () => {
-    console.log("[UI] Resetting UI for plan change.");
     attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Select a plan to see attendees.</td></tr>`;
     personCountSpan.textContent = `(0 people)`;
     quorumDisplay.innerHTML = `Quorum: ...%`;
@@ -133,13 +127,18 @@ const renderStrataPlans = (plans) => {
     if (savedSP) strataPlanSelect.value = savedSP;
 };
 
+// UPDATED: This function now correctly handles singular vs. plural.
 const renderAttendeeTable = (attendees, personCount) => {
+    const count = personCount || 0;
+    const personLabel = (count === 1) ? 'person' : 'people';
+    personCountSpan.textContent = `(${count} ${personLabel})`;
+    
     attendeeTableBody.innerHTML = '';
-    personCountSpan.textContent = `(${personCount || 0} people)`;
     if (!attendees || attendees.length === 0) {
         attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
         return;
     }
+
     attendees.sort((a, b) => a.lot - b.lot);
     attendees.forEach(attendee => {
         const isProxy = String(attendee.name).startsWith('Proxy - Lot');
@@ -184,12 +183,9 @@ const populateStrataPlans = async () => {
     }
 };
 
-// UPDATED: This function now fetches both quorum and attendees
 const fetchInitialData = async () => {
     const sp = strataPlanSelect.value;
-    console.log(`[DATA] Starting to fetch initial data for SP: ${sp}`);
     if (!sp) {
-        console.log("[DATA] No SP selected. Aborting.");
         return;
     }
     quorumDisplay.textContent = 'Loading...';
@@ -197,10 +193,8 @@ const fetchInitialData = async () => {
 
     try {
         // Fetch Quorum
-        console.log("[DATA] Fetching quorum...");
         const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`);
         const quorumData = await quorumResponse.json();
-        console.log("[DATA] Quorum response received:", quorumData);
         if (quorumData.success) {
             updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
         } else {
@@ -208,24 +202,19 @@ const fetchInitialData = async () => {
         }
 
         // Fetch Attendees
-        console.log("[DATA] Fetching attendees...");
         const attendeesResponse = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`);
         const attendeesData = await attendeesResponse.json();
-        console.log("[DATA] Attendees response received:", attendeesData);
         if (attendeesData.success) {
             renderAttendeeTable(attendeesData.attendees, attendeesData.personCount);
         } else {
            renderAttendeeTable([], 0);
         }
-
     } catch (error) {
         console.error("[DATA] A critical error occurred in fetchInitialData:", error);
         updateQuorumDisplay();
         renderAttendeeTable([], 0);
     }
 };
-
-// DELETED: The old fetchAttendees function is no longer needed.
 
 const fetchNames = () => {
     const lot = lotInput.value.trim();
@@ -382,11 +371,7 @@ const handleFormSubmit = async (event) => {
             statusEl.textContent = 'Submission successful!';
             statusEl.style.color = 'green';
             updateQuorumDisplay(result.attendanceCount, result.totalLots);
-            fetchInitialData(); // UPDATED: Changed from fetchAttendees()
-            form.reset();
-            companyRepGroup.style.display = 'none';
-            proxyHolderGroup.style.display = 'none';
-            checkboxContainer.innerHTML = '<p>Select a Strata Plan and enter a Lot Number.</p>';
+            fetchInitialData();
         } else { throw new Error(result.error); }
     } catch (error) {
         console.error('Submission Error:', error);
@@ -409,7 +394,6 @@ proxyCheckbox.addEventListener('change', () => {
 
 strataPlanSelect.addEventListener('change', async (e) => {
     const sp = e.target.value;
-    console.log(`--- Event: Strata plan changed to ${sp} ---`);
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
     resetUiOnPlanChange();
     clearStrataCache();
@@ -439,4 +423,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 lotInput.addEventListener('blur', fetchNames);
 form.addEventListener('submit', handleFormSubmit);
-setInterval(fetchInitialData, 90000); // Changed to fetchInitialData for consistency
+setInterval(fetchInitialData, 90000);
