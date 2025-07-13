@@ -197,26 +197,46 @@ const fetchAttendees = async () => {
 
 const fetchInitialData = async () => {
     const sp = strataPlanSelect.value;
+    console.log(`[DATA] Starting to fetch initial data for SP: ${sp}`);
     if (!sp) {
-        quorumDisplay.textContent = 'Select a plan';
-        quorumDisplay.style.backgroundColor = '#6c757d';
-        renderAttendeeTable([]);
-        personCountSpan.textContent = '';
+        console.log("[DATA] No SP selected. Aborting.");
         return;
     }
     quorumDisplay.textContent = 'Loading...';
+    attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading attendees...</td></tr>`;
+
     try {
+        // Fetch Quorum
+        console.log("[DATA] Fetching quorum...");
         const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`);
         const quorumData = await quorumResponse.json();
+        console.log("[DATA] Quorum response received:", quorumData);
         if (quorumData.success) {
             updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
-        } else { updateQuorumDisplay(); }
+        } else {
+            updateQuorumDisplay(); // Reset to 0
+        }
+
+        // Fetch Attendees (now inside the same try...catch block)
+        console.log("[DATA] Fetching attendees...");
+        const attendeesResponse = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`);
+        const attendeesData = await attendeesResponse.json();
+        console.log("[DATA] Attendees response received:", attendeesData);
+        if (attendeesData.success) {
+            renderAttendeeTable(attendeesData.attendees, attendeesData.personCount);
+        } else {
+           renderAttendeeTable([], 0); // Clear table on failure
+        }
+
     } catch (error) {
-        console.error("Could not fetch initial quorum:", error);
+        console.error("[DATA] A critical error occurred in fetchInitialData:", error);
         updateQuorumDisplay();
+        renderAttendeeTable([], 0);
     }
-    await fetchAttendees();
 };
+
+// You can now REMOVE the old fetchAttendees function, as its logic is included above.
+const fetchAttendees = async () => { /* This function is no longer needed */ };
 
 const fetchNames = () => {
     const lot = lotInput.value.trim();
