@@ -21,6 +21,8 @@
         button:disabled { background-color: #aaa; cursor: not-allowed; }
         #email-pdf-btn { background-color: #17a2b8; margin-top: 1rem; }
         #email-pdf-btn:hover { background-color: #138496; }
+        #sync-btn { background-color: #6c757d; margin-top: 0.5rem; }
+        #sync-btn:hover { background-color: #5a6268; }
         #status { text-align: center; margin-top: 1rem; font-weight: bold; min-height: 1.2em; }
         .attendee-section { margin-top: 2rem; }
         .attendee-section h2 { display: flex; justify-content: space-between; align-items: center; }
@@ -80,6 +82,7 @@
             </div>
             <button type="submit" id="submit-button">Submit</button>
             <p id="status"></p>
+            <button type="button" id="sync-btn" disabled>Sync Submissions</button>
         </form>
 
         <div class="attendee-section">
