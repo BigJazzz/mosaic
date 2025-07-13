@@ -23,14 +23,14 @@ const modalCancelBtn = document.getElementById('modal-cancel-btn');
 
 // --- State & Constants ---
 let fetchedNames = [];
-let strataPlanCache = null; 
+let strataPlanCache = null;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwccn5PyK9fGhPtlXOlLTQp7JQNxyxDHxTLOlYE8_Iy4Fm9sGfCmF5-P9edv50edRhnVw/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 // --- Modal Logic ---
 let modalResolve = null;
 const showModal = (text, { showInput = false, confirmText = 'Confirm', cancelText = 'Cancel', isHtml = false } = {}) => {
-    if (isHtml) { modalText.innerHTML = text; } 
+    if (isHtml) { modalText.innerHTML = text; }
     else { modalText.textContent = text; }
     modalInput.style.display = showInput ? 'block' : 'none';
     modalInput.value = '';
@@ -50,7 +50,7 @@ modalCancelBtn.addEventListener('click', () => {
 });
 modalInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
-        event.preventDefault(); 
+        event.preventDefault();
         modalConfirmBtn.click();
     }
 });
@@ -98,9 +98,8 @@ const cacheAllNames = async (sp) => {
             localStorage.setItem(cacheKey, JSON.stringify(newCacheItem));
             lotInput.disabled = false;
             checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
-        } else {
-            throw new Error(data.error);
-        }
+            console.log(`[CACHE] Successfully fetched and cached data for SP ${sp}.`);
+        } else { throw new Error(data.error); }
     } catch (error) {
          console.error('[CACHE] Failed to cache strata plan data:', error);
          checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
@@ -147,7 +146,7 @@ const renderAttendeeTable = (attendees, personCount) => {
         let ownerRepName = '';
         let companyName = '';
         let rowColor = '#d4e3c1';
-        if (isProxy) { ownerRepName = attendee.name; rowColor = '#c1e1e3'; } 
+        if (isProxy) { ownerRepName = attendee.name; rowColor = '#c1e1e3'; }
         else if (isCompany) {
             const parts = attendee.name.split(' - ');
             companyName = parts[0].trim();
@@ -398,37 +397,37 @@ proxyCheckbox.addEventListener('change', () => {
         companyRepGroup.style.display = 'block';
     }
 });
+
 strataPlanSelect.addEventListener('change', async (e) => {
     const sp = e.target.value;
     console.log(`--- Event: Strata plan changed to ${sp} ---`);
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
-    
     resetUiOnPlanChange();
-
+    clearStrataCache();
     if (sp) {
-        // First, wait for the name cache to load
         await cacheAllNames(sp);
-        // Then, fetch the current attendee and quorum data
         await fetchInitialData();
     }
 });
+
 attendeeTableBody.addEventListener('click', (e) => {
     if (e.target && e.target.classList.contains('delete-btn')) {
         const lotNumber = e.target.dataset.lot;
         handleDelete(lotNumber);
     }
 });
+
 emailPdfBtn.addEventListener('click', handleEmailPdf);
+
 document.addEventListener('DOMContentLoaded', async () => {
     await populateStrataPlans();
     const initialSP = strataPlanSelect.value;
     if (initialSP) {
-        // First, wait for the name cache to load
-        await cacheAllNames(initialSP);
-        // Then, fetch the current attendee and quorum data
-        await fetchInitialData();
+      await cacheAllNames(initialSP);
+      await fetchInitialData();
     }
 });
+
 lotInput.addEventListener('blur', fetchNames);
 form.addEventListener('submit', handleFormSubmit);
 setInterval(fetchAttendees, 90000);
