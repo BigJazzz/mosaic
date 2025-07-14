@@ -184,7 +184,7 @@ const syncSubmissions = async () => {
     } finally {
         console.log('[CLIENT] Sync process finished.');
         isSyncing = false;
-        await fetchInitialData(); 
+        await checkAndLoadMeeting(strataPlanSelect.value); 
         updateSyncButton();
     }
 };
@@ -281,37 +281,57 @@ const populateStrataPlans = async () => {
     }
 };
 
-const fetchInitialData = async () => {
-    const sp = strataPlanSelect.value;
+// NEW: Combined workflow for checking columns and fetching data
+const checkAndLoadMeeting = async (sp) => {
     if (!sp) return;
-
-    console.log(`[CLIENT] Fetching initial data for SP ${sp}.`);
+    
+    console.log(`[CLIENT] Checking for today's columns for SP ${sp}.`);
     quorumDisplay.textContent = 'Loading...';
     attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>`;
 
     try {
-        // MODIFIED: Use a single, combined request
-        const initialData = await postToServer({ action: 'getInitialData', sp: sp });
+        const columnCheck = await postToServer({ action: 'checkTodaysColumns', sp });
+        if (!columnCheck.success) throw new Error(columnCheck.error);
 
-        if (initialData.success) {
+        let initialData;
+        if (columnCheck.columnsExist) {
+            console.log(`[CLIENT] Columns exist. Fetching initial data.`);
+            initialData = await postToServer({ action: 'getInitialData', sp });
+        } else {
+            console.log(`[CLIENT] Columns do not exist. Prompting for Meeting Type.`);
+            const modalResponse = await showModal("Today's meeting has not been set up. Please enter the meeting type (e.g., AGM, EGM):", { showInput: true, confirmText: 'Set Up Meeting' });
+            
+            if (modalResponse.confirmed && modalResponse.value) {
+                const meetingType = modalResponse.value;
+                console.log(`[CLIENT] Creating columns for meeting type: ${meetingType}`);
+                initialData = await postToServer({ action: 'createAndFetchInitialData', sp, meetingType });
+            } else {
+                console.log('[CLIENT] User cancelled meeting setup.');
+                resetUiOnPlanChange(); // Reset to a clean state
+                return; // Stop execution if user cancels
+            }
+        }
+
+        // Process the data from either path
+        if (initialData && initialData.success) {
             updateQuorumDisplay(initialData.attendanceCount, initialData.totalLots);
             const syncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
             const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
             renderAttendeeTable([...syncedAttendees, ...queuedAttendees]);
         } else {
-            // Handle the case where the combined request fails
-            updateQuorumDisplay();
-            const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
-            renderAttendeeTable(queuedAttendees);
+            throw new Error(initialData ? initialData.error : "Failed to get initial data.");
         }
 
     } catch (error) {
-        console.error("[CLIENT] A critical error occurred in fetchInitialData:", error);
+        console.error("[CLIENT] A critical error occurred during meeting load:", error);
         updateQuorumDisplay();
         const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
         renderAttendeeTable(queuedAttendees);
+        statusEl.textContent = `Error: ${error.message}`;
+        statusEl.style.color = 'red';
     }
 };
+
 
 const fetchNames = () => {
     const lot = lotInput.value.trim();
@@ -361,7 +381,7 @@ const handleDeleteQueued = (submissionId) => {
     let queue = getSubmissionQueue();
     queue = queue.filter(item => item.submissionId !== submissionId);
     saveSubmissionQueue(queue);
-    fetchInitialData();
+    checkAndLoadMeeting(strataPlanSelect.value);
     updateSyncButton();
 };
 
@@ -375,7 +395,7 @@ const handleDelete = async (lotNumber) => {
             const result = await postToServer({ action: 'delete', lot: lotNumber, sp: sp });
             if (result.success) {
                 statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-                fetchInitialData();
+                checkAndLoadMeeting(sp);
             } else { throw new Error(result.error); }
         } catch (error) {
             console.error('Deletion Error:', error);
@@ -426,13 +446,10 @@ const handleClearCache = async () => {
 
     if (modalResponse.confirmed) {
         console.log('[CLIENT] User confirmed. Clearing all cached data.');
-        
         localStorage.removeItem('submissionQueue');
         clearStrataCache(); 
-
         document.cookie = 'selectedSP=; Max-Age=0; path=/;';
         console.log('[CLIENT] Cache and cookies cleared.');
-
         location.reload();
     } else {
         console.log('[CLIENT] User cancelled cache clearing.');
@@ -488,7 +505,7 @@ const handleFormSubmit = async (event) => {
     checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
     lotInput.focus();
     updateSyncButton();
-    fetchInitialData();
+    checkAndLoadMeeting(sp);
     setTimeout(() => { if (statusEl.textContent === `Lot ${lot} queued for submission.`) statusEl.textContent = ''; }, 3000);
 };
 
@@ -510,7 +527,7 @@ strataPlanSelect.addEventListener('change', async (e) => {
     resetUiOnPlanChange();
     if (sp) {
         await cacheAllNames(sp);
-        await fetchInitialData();
+        await checkAndLoadMeeting(sp);
     }
 });
 
@@ -536,7 +553,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const initialSP = strataPlanSelect.value;
     if (initialSP) {
       await cacheAllNames(initialSP);
-      await fetchInitialData();
+      await checkAndLoadMeeting(initialSP);
     }
     updateSyncButton();
     setInterval(syncSubmissions, 60000);
