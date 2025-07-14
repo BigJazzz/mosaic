@@ -1,6 +1,7 @@
 // --- DOM Elements ---
 const lotInput = document.getElementById('lot-number');
 const checkboxContainer = document.getElementById('checkbox-container');
+const ownerLabel = document.getElementById('owner-label');
 const form = document.getElementById('attendance-form');
 const statusEl = document.getElementById('status');
 const submitButton = document.getElementById('submit-button');
@@ -113,7 +114,7 @@ const cacheAllNames = async (sp) => {
             checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
         } else { throw new Error(data.error); }
     } catch (error) {
-         checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
+       checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
     }
 };
 
@@ -445,6 +446,7 @@ proxyCheckbox.addEventListener('change', () => {
     const isChecked = proxyCheckbox.checked;
     proxyHolderGroup.style.display = isChecked ? 'block' : 'none';
     checkboxContainer.style.display = isChecked ? 'none' : 'block';
+    ownerLabel.style.display = isChecked ? 'none' : 'block'; // Hides the "Owner/s" label
     companyRepGroup.style.display = 'none';
     if (!isChecked && fetchedNames.length > 0 && /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0])) {
         companyRepGroup.style.display = 'block';
