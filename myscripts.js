@@ -24,10 +24,24 @@ const modalCancelBtn = document.getElementById('modal-cancel-btn');
 
 // --- State & Constants ---
 let fetchedNames = [];
-let strataPlanCache = null; 
+let strataPlanCache = null;
 let isSyncing = false;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// --- Helper for making POST requests ---
+const postToServer = async (body) => {
+    const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(body)
+    });
+    if (!response.ok) {
+        throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+    return response.json();
+};
 
 // --- Modal Logic ---
 let modalResolve = null;
@@ -88,9 +102,9 @@ const cacheAllNames = async (sp) => {
             localStorage.removeItem(cacheKey);
         }
     }
+
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=getAllNamesForPlan&sp=${sp}`);
-        const data = await response.json();
+        const data = await postToServer({ action: 'getAllNamesForPlan', sp: sp });
         if (data.success) {
             const newCacheItem = { timestamp: new Date().getTime(), names: data.names };
             strataPlanCache = data.names;
@@ -130,11 +144,7 @@ const syncSubmissions = async () => {
     const batchToSend = [...queue];
 
     try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ action: 'batchSubmit', submissions: batchToSend })
-        });
-        const result = await response.json();
+        const result = await postToServer({ action: 'batchSubmit', submissions: batchToSend });
         if (result.success) {
             const currentQueue = getSubmissionQueue();
             const sentIds = new Set(batchToSend.map(item => item.submissionId));
@@ -142,7 +152,9 @@ const syncSubmissions = async () => {
             saveSubmissionQueue(newQueue);
             statusEl.textContent = `Successfully synced ${batchToSend.length} items.`;
             statusEl.style.color = 'green';
-        } else { throw new Error(result.error); }
+        } else {
+            throw new Error(result.error);
+        }
     } catch (error) {
         statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
@@ -232,8 +244,7 @@ const updateQuorumDisplay = (count = 0, total = 0) => {
 // --- Data Fetching & API Calls ---
 const populateStrataPlans = async () => {
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=getStrataPlans`);
-        const data = await response.json();
+        const data = await postToServer({ action: 'getStrataPlans' });
         if (data.success && data.plans) {
             renderStrataPlans(data.plans);
             strataPlanSelect.disabled = false;
@@ -254,19 +265,17 @@ const fetchInitialData = async () => {
     attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>`;
 
     try {
-        const [quorumRes, attendeesRes] = await Promise.all([
-            fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`),
-            fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`)
+        const [quorumData, attendeesData] = await Promise.all([
+            postToServer({ action: 'getQuorum', sp: sp }),
+            postToServer({ action: 'getAttendees', sp: sp })
         ]);
 
-        const quorumData = await quorumRes.json();
         if (quorumData.success) {
             updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
         } else {
             updateQuorumDisplay();
         }
 
-        const attendeesData = await attendeesRes.json();
         const syncedAttendees = attendeesData.success ? attendeesData.attendees.map(a => ({...a, status: 'synced'})) : [];
         const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
         
@@ -337,11 +346,7 @@ const handleDelete = async (lotNumber) => {
     if (modalResponse.confirmed) {
         statusEl.textContent = `Deleting Lot ${lotNumber}...`;
         try {
-            const response = await fetch(APPS_SCRIPT_URL, {
-                method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ action: 'delete', lot: lotNumber, sp: sp })
-            });
-            const result = await response.json();
+            const result = await postToServer({ action: 'delete', lot: lotNumber, sp: sp });
             if (result.success) {
                 statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
                 fetchInitialData();
