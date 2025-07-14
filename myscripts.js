@@ -57,7 +57,9 @@ modalInput.addEventListener('keydown', (event) => {
     }
 });
 
-// --- Caching Logic ---
+// --- Caching & Queue Logic ---
+const getSubmissionQueue = () => JSON.parse(localStorage.getItem('submissionQueue') || '[]');
+const saveSubmissionQueue = (queue) => localStorage.setItem('submissionQueue', JSON.stringify(queue));
 const clearStrataCache = () => {
     Object.keys(localStorage).forEach(key => {
         if (key.startsWith('strata_')) {
@@ -104,11 +106,11 @@ const cacheAllNames = async (sp) => {
     }
 };
 
-// --- Submission Queue & Syncing ---
+// --- Submission Syncing ---
 const updateSyncButton = () => {
-    const queue = JSON.parse(localStorage.getItem('submissionQueue') || '[]');
+    const queue = getSubmissionQueue();
     if (queue.length > 0) {
-        syncBtn.disabled = false;
+        syncBtn.disabled = isSyncing;
         const plural = queue.length === 1 ? '' : 's';
         syncBtn.textContent = `Sync ${queue.length} Submission${plural}`;
     } else {
@@ -118,14 +120,19 @@ const updateSyncButton = () => {
 };
 
 const syncSubmissions = async () => {
-    if (isSyncing) { return; }
-    const queue = JSON.parse(localStorage.getItem('submissionQueue') || '[]');
-    if (queue.length === 0) { updateSyncButton(); return; }
+    if (isSyncing || navigator.onLine === false) {
+        return;
+    }
+    const queue = getSubmissionQueue();
+    if (queue.length === 0) {
+        return;
+    }
 
     isSyncing = true;
     statusEl.textContent = `Syncing ${queue.length} items...`;
     statusEl.style.color = 'blue';
-    syncBtn.disabled = true;
+    updateSyncButton();
+    document.querySelectorAll('.delete-btn[data-submission-id]').forEach(btn => btn.disabled = true);
 
     const batchToSend = [...queue];
 
@@ -138,21 +145,21 @@ const syncSubmissions = async () => {
         });
         const result = await response.json();
         if (result.success) {
-            const currentQueue = JSON.parse(localStorage.getItem('submissionQueue') || '[]');
+            const currentQueue = getSubmissionQueue();
             const sentIds = new Set(batchToSend.map(item => item.submissionId));
             const newQueue = currentQueue.filter(item => !sentIds.has(item.submissionId));
-            localStorage.setItem('submissionQueue', JSON.stringify(newQueue));
+            saveSubmissionQueue(newQueue);
             statusEl.textContent = `Successfully synced ${batchToSend.length} items.`;
             statusEl.style.color = 'green';
-            fetchInitialData();
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        statusEl.textContent = `Sync failed. Items remain queued. Error: ${error.message}`;
+        statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
     } finally {
         isSyncing = false;
+        await fetchInitialData(); 
         updateSyncButton();
     }
 };
@@ -182,10 +189,10 @@ const renderStrataPlans = (plans) => {
     if (savedSP) strataPlanSelect.value = savedSP;
 };
 
-const renderAttendeeTable = (attendees, personCount) => {
-    const count = personCount || 0;
-    const personLabel = (count === 1) ? 'person' : 'people';
-    personCountSpan.textContent = `(${count} ${personLabel})`;
+const renderAttendeeTable = (attendees) => {
+    const syncedCount = attendees.filter(item => item.status !== 'queued').length;
+    const personLabel = (syncedCount === 1) ? 'person' : 'people';
+    personCountSpan.textContent = `(${syncedCount} ${personLabel})`;
     
     attendeeTableBody.innerHTML = '';
     if (!attendees || attendees.length === 0) {
@@ -194,22 +201,35 @@ const renderAttendeeTable = (attendees, personCount) => {
     }
 
     attendees.sort((a, b) => a.lot - b.lot);
-    attendees.forEach(attendee => {
-        const isProxy = String(attendee.name).startsWith('Proxy - Lot');
-        const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(attendee.name);
+    attendees.forEach(item => {
+        const isQueued = item.status === 'queued';
+        const name = item.name || (item.proxyHolderLot ? `Proxy - Lot ${item.proxyHolderLot}` : item.names.join(', '));
+        const isProxy = String(name).startsWith('Proxy - Lot');
+        const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(name);
+        
         let ownerRepName = '';
         let companyName = '';
-        let rowColor = '#d4e3c1';
-        if (isProxy) { ownerRepName = attendee.name; rowColor = '#c1e1e3'; } 
-        else if (isCompany) {
-            const parts = attendee.name.split(' - ');
+        let rowColor = isQueued ? '#f5e0df' : '#d4e3c1';
+
+        if (isProxy) {
+            ownerRepName = name;
+            if (!isQueued) rowColor = '#c1e1e3';
+        } else if (isCompany) {
+            const parts = name.split(' - ');
             companyName = parts[0].trim();
             if (parts.length > 1) ownerRepName = parts[1].trim();
-            rowColor = '#cbc1e3';
-        } else { ownerRepName = attendee.name; }
+            if (!isQueued) rowColor = '#cbc1e3';
+        } else {
+            ownerRepName = name;
+        }
+        
         const row = document.createElement('tr');
         row.style.backgroundColor = rowColor;
-        row.innerHTML = `<td>${attendee.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td><button class="delete-btn" data-lot="${attendee.lot}">Delete</button></td>`;
+        const deleteButton = isQueued 
+            ? `<button class="delete-btn" data-type="queued" data-submission-id="${item.submissionId}">Delete</button>`
+            : `<button class="delete-btn" data-type="synced" data-lot="${item.lot}">Delete</button>`;
+            
+        row.innerHTML = `<td>${item.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td>${deleteButton}</td>`;
         attendeeTableBody.appendChild(row);
     });
 };
@@ -239,32 +259,35 @@ const populateStrataPlans = async () => {
 
 const fetchInitialData = async () => {
     const sp = strataPlanSelect.value;
-    if (!sp) {
-        return;
-    }
+    if (!sp) return;
+
     quorumDisplay.textContent = 'Loading...';
-    attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading attendees...</td></tr>`;
+    attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>`;
 
     try {
-        const quorumResponse = await fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`);
-        const quorumData = await quorumResponse.json();
+        const [quorumRes, attendeesRes] = await Promise.all([
+            fetch(`${APPS_SCRIPT_URL}?action=getQuorum&sp=${sp}`),
+            fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`)
+        ]);
+
+        const quorumData = await quorumRes.json();
         if (quorumData.success) {
             updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
         } else {
             updateQuorumDisplay();
         }
 
-        const attendeesResponse = await fetch(`${APPS_SCRIPT_URL}?action=getAttendees&sp=${sp}`);
-        const attendeesData = await attendeesResponse.json();
-        if (attendeesData.success) {
-            renderAttendeeTable(attendeesData.attendees, attendeesData.personCount);
-        } else {
-           renderAttendeeTable([], 0);
-        }
+        const attendeesData = await attendeesRes.json();
+        const syncedAttendees = attendeesData.success ? attendeesData.attendees.map(a => ({...a, status: 'synced'})) : [];
+        const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
+        
+        renderAttendeeTable([...syncedAttendees, ...queuedAttendees]);
+
     } catch (error) {
         console.error("[DATA] A critical error occurred in fetchInitialData:", error);
         updateQuorumDisplay();
-        renderAttendeeTable([], 0);
+        const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
+        renderAttendeeTable(queuedAttendees);
     }
 };
 
@@ -310,6 +333,14 @@ const fetchNames = () => {
     }
 };
 
+const handleDeleteQueued = (submissionId) => {
+    let queue = getSubmissionQueue();
+    queue = queue.filter(item => item.submissionId !== submissionId);
+    saveSubmissionQueue(queue);
+    fetchInitialData();
+    updateSyncButton();
+};
+
 const handleDelete = async (lotNumber) => {
     const sp = strataPlanSelect.value;
     if (!sp) return;
@@ -317,55 +348,15 @@ const handleDelete = async (lotNumber) => {
     if (modalResponse.confirmed) {
         statusEl.textContent = `Deleting Lot ${lotNumber}...`;
         try {
-            const response = await fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'cors',
-                headers: { 'Content-Type': 'text/plain' },
+            await fetch(APPS_SCRIPT_URL, {
+                method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({ action: 'delete', lot: lotNumber, sp: sp })
             });
-            const result = await response.json();
-            if (result.success) {
-                statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-                fetchInitialData();
-            } else { throw new Error(result.error); }
+            statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
+            fetchInitialData();
         } catch (error) {
-            console.error('Deletion Error:', error);
             statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
         }
-    }
-};
-
-const handleEmailPdf = async () => {
-    const sp = strataPlanSelect.value;
-    if (!sp) {
-        statusEl.textContent = 'Please select a Strata Plan first.';
-        statusEl.style.color = 'red';
-        return;
-    }
-    const modalResponse = await showModal("Enter the email address to send the PDF report to:", { showInput: true, confirmText: 'Send Email' });
-    if (modalResponse.confirmed && modalResponse.value) {
-        const email = modalResponse.value;
-        if (!/^\S+@\S+\.\S+$/.test(email)) {
-            statusEl.textContent = 'Invalid email address.';
-            statusEl.style.color = 'red';
-            return;
-        }
-        statusEl.textContent = 'Sending request... The PDF will be emailed shortly.';
-        statusEl.style.color = 'blue';
-        emailPdfBtn.disabled = true;
-        fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ action: 'emailPdfReport', sp: sp, email: email })
-        }).catch(err => {
-            console.warn("Ignoring expected 'Failed to fetch' error for long-running process.", err);
-        });
-        setTimeout(() => {
-            statusEl.textContent = `Report generation started. Please check ${email} in a moment.`;
-            statusEl.style.color = 'green';
-            emailPdfBtn.disabled = false;
-        }, 1500);
     }
 };
 
@@ -402,9 +393,9 @@ const handleFormSubmit = async (event) => {
         sp, lot, names: selectedNames, financial: isFinancial, proxyHolderLot, companyRep
     };
 
-    const queue = JSON.parse(localStorage.getItem('submissionQueue') || '[]');
+    const queue = getSubmissionQueue();
     queue.push(submission);
-    localStorage.setItem('submissionQueue', JSON.stringify(queue));
+    saveSubmissionQueue(queue);
 
     statusEl.textContent = `Lot ${lot} queued for submission.`;
     statusEl.style.color = 'green';
@@ -413,8 +404,8 @@ const handleFormSubmit = async (event) => {
     proxyHolderGroup.style.display = 'none';
     checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
     lotInput.focus();
-
     updateSyncButton();
+    fetchInitialData();
     setTimeout(() => { if (statusEl.textContent === `Lot ${lot} queued for submission.`) statusEl.textContent = ''; }, 3000);
 };
 
@@ -432,7 +423,6 @@ strataPlanSelect.addEventListener('change', async (e) => {
     const sp = e.target.value;
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
     resetUiOnPlanChange();
-    clearStrataCache();
     if (sp) {
         await cacheAllNames(sp);
         await fetchInitialData();
@@ -440,9 +430,14 @@ strataPlanSelect.addEventListener('change', async (e) => {
 });
 
 attendeeTableBody.addEventListener('click', (e) => {
-    if (e.target && e.target.classList.contains('delete-btn')) {
-        const lotNumber = e.target.dataset.lot;
-        handleDelete(lotNumber);
+    const target = e.target;
+    if (target && target.classList.contains('delete-btn')) {
+        const type = target.dataset.type;
+        if (type === 'queued') {
+            handleDeleteQueued(target.dataset.submissionId);
+        } else if (type === 'synced') {
+            handleDelete(target.dataset.lot);
+        }
     }
 });
 
@@ -462,4 +457,3 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 lotInput.addEventListener('blur', fetchNames);
 form.addEventListener('submit', handleFormSubmit);
-setInterval(fetchInitialData, 90000);
