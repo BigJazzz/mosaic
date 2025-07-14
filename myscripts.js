@@ -7,10 +7,11 @@ const passwordInput = document.getElementById('password');
 const loginStatus = document.getElementById('login-status');
 const userDisplay = document.getElementById('user-display');
 const adminPanel = document.getElementById('admin-panel');
-const userList = document.getElementById('user-list');
+const userListBody = document.getElementById('user-list-body');
 const addUserBtn = document.getElementById('add-user-btn');
 const changePasswordBtn = document.getElementById('change-password-btn');
 const logoutBtn = document.getElementById('logout-btn');
+const strataPlanWrapper = document.getElementById('strata-plan-wrapper');
 
 const lotInput = document.getElementById('lot-number');
 const checkboxContainer = document.getElementById('checkbox-container');
@@ -48,7 +49,6 @@ const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 // --- Helper for making POST requests ---
 const postToServer = async (body) => {
-    // Add user credentials to every request if logged in
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
     if (sessionUser) {
         body.user = sessionUser;
@@ -66,11 +66,8 @@ const postToServer = async (body) => {
     }
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
-    if (!jsonResponse.success) {
-      // Handle server-side errors, including auth errors
-      if (jsonResponse.error && jsonResponse.error.includes("Authentication failed")) {
-          handleLogout(); // Force logout on auth failure
-      }
+    if (!jsonResponse.success && jsonResponse.error && jsonResponse.error.includes("Authentication failed")) {
+        handleLogout();
     }
     return jsonResponse;
 };
@@ -121,7 +118,7 @@ const handleLogin = async (event) => {
         const result = await postToServer({ action: 'loginUser', username, password });
         if (result.success) {
             loginStatus.textContent = '';
-            const user = { username: result.username, role: result.role };
+            const user = { username: result.username, role: result.role, spAccess: result.spAccess };
             sessionStorage.setItem('attendanceUser', JSON.stringify(user));
             initializeApp(user);
         } else {
@@ -147,15 +144,27 @@ const initializeApp = (user) => {
         adminPanel.classList.remove('hidden');
         loadUsers();
     }
-
-    populateStrataPlans().then(() => {
-        const initialSP = strataPlanSelect.value;
-        if (initialSP) {
-            cacheAllNames(initialSP).then(() => {
-                checkAndLoadMeeting(initialSP);
+    
+    // MODIFIED: Handle SP Access restrictions
+    if (user.spAccess) {
+        strataPlanWrapper.classList.add('hidden');
+        populateStrataPlans().then(() => {
+            strataPlanSelect.value = user.spAccess;
+            cacheAllNames(user.spAccess).then(() => {
+                checkAndLoadMeeting(user.spAccess);
             });
-        }
-    });
+        });
+    } else {
+        populateStrataPlans().then(() => {
+            const initialSP = strataPlanSelect.value;
+            if (initialSP) {
+                cacheAllNames(initialSP).then(() => {
+                    checkAndLoadMeeting(initialSP);
+                });
+            }
+        });
+    }
+
     updateSyncButton();
     setInterval(syncSubmissions, 60000);
 };
@@ -168,18 +177,19 @@ const loadUsers = async () => {
 
         const result = await postToServer({ action: 'getUsers' });
         if (result.success) {
-            userList.innerHTML = '';
+            userListBody.innerHTML = ''; // MODIFIED: Target table body
             result.users.forEach(user => {
-                const li = document.createElement('li');
+                const tr = document.createElement('tr');
                 const isCurrentUser = user.username === sessionUser.username;
+                const removeButtonHtml = isCurrentUser ? '' : `<button class="delete-btn" data-username="${user.username}">Remove</button>`;
                 
-                // MODIFIED: Only show the "Remove" button if it's not the currently logged-in user
-                const removeButtonHtml = isCurrentUser 
-                    ? '' 
-                    : `<button class="delete-btn" data-username="${user.username}">Remove</button>`;
-
-                li.innerHTML = `<span>${user.username} (${user.role})</span> ${removeButtonHtml}`;
-                userList.appendChild(li);
+                tr.innerHTML = `
+                    <td>${user.username}</td>
+                    <td>${user.role}</td>
+                    <td>${user.spAccess || 'All'}</td>
+                    <td>${removeButtonHtml}</td>
+                `;
+                userListBody.appendChild(tr);
             });
         }
     } catch (error) {
@@ -194,8 +204,11 @@ const handleAddUser = async () => {
     const passwordRes = await showModal("Enter new user's password:", { showInput: true, inputType: 'password', confirmText: 'Next' });
     if (!passwordRes.confirmed || !passwordRes.value) return;
 
-    const roleRes = await showModal("Enter role (Admin or User):", { showInput: true, confirmText: 'Add User' });
+    const roleRes = await showModal("Enter role (Admin or User):", { showInput: true, confirmText: 'Next' });
     if (!roleRes.confirmed || !roleRes.value) return;
+    
+    const spAccessRes = await showModal("Enter SP Access number (or leave blank for all):", { showInput: true, confirmText: 'Add User' });
+    if (!spAccessRes.confirmed) return; // Allow blank value
 
     const role = roleRes.value.trim();
     if (role !== 'Admin' && role !== 'User') {
@@ -205,7 +218,13 @@ const handleAddUser = async () => {
     }
 
     try {
-        const result = await postToServer({ action: 'addUser', username: usernameRes.value, password: passwordRes.value, role });
+        const result = await postToServer({ 
+            action: 'addUser', 
+            username: usernameRes.value, 
+            password: passwordRes.value, 
+            role,
+            spAccess: spAccessRes.value 
+        });
         if (result.success) {
             statusEl.textContent = 'User added successfully.';
             statusEl.style.color = 'green';
@@ -283,19 +302,16 @@ const cacheAllNames = async (sp) => {
         const { timestamp, names } = JSON.parse(cachedItem);
         const isCacheValid = (new Date().getTime() - timestamp) < CACHE_DURATION_MS;
         if (isCacheValid) {
-            console.log(`[CLIENT] Using cached names for SP ${sp}.`);
             strataPlanCache = names;
             lotInput.disabled = false;
             checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
             return;
         } else {
-            console.log(`[CLIENT] Cache for SP ${sp} is expired. Refetching.`);
             localStorage.removeItem(cacheKey);
         }
     }
 
     try {
-        console.log(`[CLIENT] Fetching all names for SP ${sp} from server.`);
         const data = await postToServer({ action: 'getAllNamesForPlan', sp: sp });
         if (data.success) {
             const newCacheItem = { timestamp: new Date().getTime(), names: data.names };
@@ -600,7 +616,6 @@ const handleClearCache = async () => {
         localStorage.removeItem('submissionQueue');
         clearStrataCache(); 
         document.cookie = 'selectedSP=; Max-Age=0; path=/;';
-        // No full reload, just clear the UI
         resetUiOnPlanChange();
         updateDisplay(strataPlanSelect.value);
     }
@@ -667,7 +682,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
     addUserBtn.addEventListener('click', handleAddUser);
-    userList.addEventListener('click', handleRemoveUser);
+    userListBody.addEventListener('click', handleRemoveUser); // MODIFIED: Listener on table body
     changePasswordBtn.addEventListener('click', handleChangePassword);
     
     // App listeners
@@ -693,7 +708,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Check for existing session on load
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
     if (sessionUser) {
         initializeApp(sessionUser);
