@@ -17,6 +17,7 @@ const proxyHolderLotInput = document.getElementById('proxy-holder-lot');
 const strataPlanSelect = document.getElementById('strata-plan-select');
 const emailPdfBtn = document.getElementById('email-pdf-btn');
 const syncBtn = document.getElementById('sync-btn');
+const clearCacheBtn = document.getElementById('clear-cache-btn'); // New button
 const modal = document.getElementById('custom-modal');
 const modalText = document.getElementById('modal-text');
 const modalInput = document.getElementById('modal-input');
@@ -418,6 +419,32 @@ const handleEmailPdf = async () => {
     }
 };
 
+// --- New Cache Clearing Handler ---
+const handleClearCache = async () => {
+    const modalResponse = await showModal(
+        "Are you sure you want to clear all cached data? This will remove any unsynced submissions and log you out of the current strata plan.",
+        { confirmText: 'Yes, Clear Data', cancelText: 'Cancel' }
+    );
+
+    if (modalResponse.confirmed) {
+        console.log('[CLIENT] User confirmed. Clearing all cached data.');
+        
+        // 1. Clear local storage
+        localStorage.removeItem('submissionQueue');
+        clearStrataCache(); // This handles all strata_* keys
+
+        // 2. Clear cookie
+        document.cookie = 'selectedSP=; Max-Age=0; path=/;';
+        console.log('[CLIENT] Cache and cookies cleared.');
+
+        // 3. Reload the page
+        location.reload();
+    } else {
+        console.log('[CLIENT] User cancelled cache clearing.');
+    }
+};
+
+
 // --- Event Handlers ---
 const handleFormSubmit = async (event) => {
     event.preventDefault();
@@ -506,6 +533,7 @@ attendeeTableBody.addEventListener('click', (e) => {
 
 emailPdfBtn.addEventListener('click', handleEmailPdf);
 syncBtn.addEventListener('click', syncSubmissions);
+clearCacheBtn.addEventListener('click', handleClearCache); // New listener
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('[CLIENT] Page loaded (DOMContentLoaded).');
