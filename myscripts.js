@@ -17,7 +17,7 @@ const proxyHolderLotInput = document.getElementById('proxy-holder-lot');
 const strataPlanSelect = document.getElementById('strata-plan-select');
 const emailPdfBtn = document.getElementById('email-pdf-btn');
 const syncBtn = document.getElementById('sync-btn');
-const clearCacheBtn = document.getElementById('clear-cache-btn'); // New button
+const clearCacheBtn = document.getElementById('clear-cache-btn');
 const modal = document.getElementById('custom-modal');
 const modalText = document.getElementById('modal-text');
 const modalInput = document.getElementById('modal-input');
@@ -290,21 +290,20 @@ const fetchInitialData = async () => {
     attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>`;
 
     try {
-        const [quorumData, attendeesData] = await Promise.all([
-            postToServer({ action: 'getQuorum', sp: sp }),
-            postToServer({ action: 'getAttendees', sp: sp })
-        ]);
+        // MODIFIED: Use a single, combined request
+        const initialData = await postToServer({ action: 'getInitialData', sp: sp });
 
-        if (quorumData.success) {
-            updateQuorumDisplay(quorumData.attendanceCount, quorumData.totalLots);
+        if (initialData.success) {
+            updateQuorumDisplay(initialData.attendanceCount, initialData.totalLots);
+            const syncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
+            const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
+            renderAttendeeTable([...syncedAttendees, ...queuedAttendees]);
         } else {
+            // Handle the case where the combined request fails
             updateQuorumDisplay();
+            const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
+            renderAttendeeTable(queuedAttendees);
         }
-
-        const syncedAttendees = attendeesData.success ? attendeesData.attendees.map(a => ({...a, status: 'synced'})) : [];
-        const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
-        
-        renderAttendeeTable([...syncedAttendees, ...queuedAttendees]);
 
     } catch (error) {
         console.error("[CLIENT] A critical error occurred in fetchInitialData:", error);
@@ -419,7 +418,6 @@ const handleEmailPdf = async () => {
     }
 };
 
-// --- New Cache Clearing Handler ---
 const handleClearCache = async () => {
     const modalResponse = await showModal(
         "Are you sure you want to clear all cached data? This will remove any unsynced submissions and log you out of the current strata plan.",
@@ -429,15 +427,12 @@ const handleClearCache = async () => {
     if (modalResponse.confirmed) {
         console.log('[CLIENT] User confirmed. Clearing all cached data.');
         
-        // 1. Clear local storage
         localStorage.removeItem('submissionQueue');
-        clearStrataCache(); // This handles all strata_* keys
+        clearStrataCache(); 
 
-        // 2. Clear cookie
         document.cookie = 'selectedSP=; Max-Age=0; path=/;';
         console.log('[CLIENT] Cache and cookies cleared.');
 
-        // 3. Reload the page
         location.reload();
     } else {
         console.log('[CLIENT] User cancelled cache clearing.');
@@ -501,7 +496,7 @@ proxyCheckbox.addEventListener('change', () => {
     const isChecked = proxyCheckbox.checked;
     proxyHolderGroup.style.display = isChecked ? 'block' : 'none';
     checkboxContainer.style.display = isChecked ? 'none' : 'block';
-    ownerLabel.style.display = isChecked ? 'none' : 'block'; // Hides the "Owner/s" label
+    ownerLabel.style.display = isChecked ? 'none' : 'block';
     companyRepGroup.style.display = 'none';
     if (!isChecked && fetchedNames.length > 0 && /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0])) {
         companyRepGroup.style.display = 'block';
@@ -533,7 +528,7 @@ attendeeTableBody.addEventListener('click', (e) => {
 
 emailPdfBtn.addEventListener('click', handleEmailPdf);
 syncBtn.addEventListener('click', syncSubmissions);
-clearCacheBtn.addEventListener('click', handleClearCache); // New listener
+clearCacheBtn.addEventListener('click', handleClearCache);
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('[CLIENT] Page loaded (DOMContentLoaded).');
