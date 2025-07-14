@@ -27,11 +27,12 @@ const modalCancelBtn = document.getElementById('modal-cancel-btn');
 let fetchedNames = [];
 let strataPlanCache = null;
 let isSyncing = false;
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwccn5PyK9fGhPtlXOlLTQp7JQNxyxDHxTLOlYE8_Iy4Fm9sGfCmF5-P9edv50edRhnVw/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 // --- Helper for making POST requests ---
 const postToServer = async (body) => {
+    console.log('[CLIENT] Making POST request to server with body:', body);
     const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'cors',
@@ -39,9 +40,12 @@ const postToServer = async (body) => {
         body: JSON.stringify(body)
     });
     if (!response.ok) {
+        console.error('[CLIENT] Network response was not ok.', response);
         throw new Error(`Network response was not ok: ${response.statusText}`);
     }
-    return response.json();
+    const jsonResponse = await response.json();
+    console.log('[CLIENT] Received response from server:', jsonResponse);
+    return jsonResponse;
 };
 
 // --- Modal Logic ---
@@ -95,16 +99,19 @@ const cacheAllNames = async (sp) => {
         const { timestamp, names } = JSON.parse(cachedItem);
         const isCacheValid = (new Date().getTime() - timestamp) < CACHE_DURATION_MS;
         if (isCacheValid) {
+            console.log(`[CLIENT] Using cached names for SP ${sp}.`);
             strataPlanCache = names;
             lotInput.disabled = false;
             checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
             return;
         } else {
+            console.log(`[CLIENT] Cache for SP ${sp} is expired. Refetching.`);
             localStorage.removeItem(cacheKey);
         }
     }
 
     try {
+        console.log(`[CLIENT] Fetching all names for SP ${sp} from server.`);
         const data = await postToServer({ action: 'getAllNamesForPlan', sp: sp });
         if (data.success) {
             const newCacheItem = { timestamp: new Date().getTime(), names: data.names };
@@ -114,6 +121,7 @@ const cacheAllNames = async (sp) => {
             checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
         } else { throw new Error(data.error); }
     } catch (error) {
+       console.error(`[CLIENT] Could not load data for SP ${sp}. Error:`, error);
        checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
     }
 };
@@ -132,10 +140,19 @@ const updateSyncButton = () => {
 };
 
 const syncSubmissions = async () => {
-    if (isSyncing || navigator.onLine === false) return;
+    if (isSyncing) {
+        console.log('[CLIENT] Sync already in progress. Skipping.');
+        return;
+    }
+    if (navigator.onLine === false) {
+        console.log('[CLIENT] Offline. Skipping sync.');
+        return;
+    }
+
     const queue = getSubmissionQueue();
     if (queue.length === 0) return;
-
+    
+    console.log(`[CLIENT] Starting sync. Found ${queue.length} items in queue.`);
     isSyncing = true;
     statusEl.textContent = `Syncing ${queue.length} items...`;
     statusEl.style.color = 'blue';
@@ -143,10 +160,12 @@ const syncSubmissions = async () => {
     document.querySelectorAll('.delete-btn[data-submission-id]').forEach(btn => btn.disabled = true);
 
     const batchToSend = [...queue];
+    console.log('[CLIENT] Batch to send:', batchToSend);
 
     try {
         const result = await postToServer({ action: 'batchSubmit', submissions: batchToSend });
         if (result.success) {
+            console.log('[CLIENT] Sync successful. Clearing sent items from local queue.');
             const currentQueue = getSubmissionQueue();
             const sentIds = new Set(batchToSend.map(item => item.submissionId));
             const newQueue = currentQueue.filter(item => !sentIds.has(item.submissionId));
@@ -154,12 +173,15 @@ const syncSubmissions = async () => {
             statusEl.textContent = `Successfully synced ${batchToSend.length} items.`;
             statusEl.style.color = 'green';
         } else {
+            console.error('[CLIENT] Server indicated sync failure.', result.error);
             throw new Error(result.error);
         }
     } catch (error) {
+        console.error('[CLIENT] Sync failed! Error:', error);
         statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
     } finally {
+        console.log('[CLIENT] Sync process finished.');
         isSyncing = false;
         await fetchInitialData(); 
         updateSyncButton();
@@ -262,6 +284,7 @@ const fetchInitialData = async () => {
     const sp = strataPlanSelect.value;
     if (!sp) return;
 
+    console.log(`[CLIENT] Fetching initial data for SP ${sp}.`);
     quorumDisplay.textContent = 'Loading...';
     attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>`;
 
@@ -283,7 +306,7 @@ const fetchInitialData = async () => {
         renderAttendeeTable([...syncedAttendees, ...queuedAttendees]);
 
     } catch (error) {
-        console.error("[DATA] A critical error occurred in fetchInitialData:", error);
+        console.error("[CLIENT] A critical error occurred in fetchInitialData:", error);
         updateQuorumDisplay();
         const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
         renderAttendeeTable(queuedAttendees);
@@ -292,6 +315,7 @@ const fetchInitialData = async () => {
 
 const fetchNames = () => {
     const lot = lotInput.value.trim();
+    console.log(`[CLIENT] Fetching names for lot: ${lot}`);
     companyRepGroup.style.display = 'none';
     companyRepInput.value = '';
     fetchedNames = [];
@@ -333,6 +357,7 @@ const fetchNames = () => {
 };
 
 const handleDeleteQueued = (submissionId) => {
+    console.log(`[CLIENT] Deleting queued item with ID: ${submissionId}`);
     let queue = getSubmissionQueue();
     queue = queue.filter(item => item.submissionId !== submissionId);
     saveSubmissionQueue(queue);
@@ -396,6 +421,7 @@ const handleEmailPdf = async () => {
 // --- Event Handlers ---
 const handleFormSubmit = async (event) => {
     event.preventDefault();
+    console.log('[CLIENT] Form submit event triggered.');
     const sp = strataPlanSelect.value;
     const lot = lotInput.value.trim();
     if (!sp || !lot) {
@@ -425,10 +451,12 @@ const handleFormSubmit = async (event) => {
         submissionId: `sub_${Date.now()}_${Math.random()}`,
         sp, lot, names: selectedNames, financial: isFinancial, proxyHolderLot, companyRep
     };
+    console.log('[CLIENT] Form submission validated. Creating submission object:', submission);
 
     const queue = getSubmissionQueue();
     queue.push(submission);
     saveSubmissionQueue(queue);
+    console.log('[CLIENT] Submission added to local queue.');
 
     statusEl.textContent = `Lot ${lot} queued for submission.`;
     statusEl.style.color = 'green';
@@ -455,6 +483,7 @@ proxyCheckbox.addEventListener('change', () => {
 
 strataPlanSelect.addEventListener('change', async (e) => {
     const sp = e.target.value;
+    console.log(`[CLIENT] Strata Plan changed to: ${sp}`);
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
     resetUiOnPlanChange();
     if (sp) {
@@ -479,6 +508,7 @@ emailPdfBtn.addEventListener('click', handleEmailPdf);
 syncBtn.addEventListener('click', syncSubmissions);
 
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[CLIENT] Page loaded (DOMContentLoaded).');
     await populateStrataPlans();
     const initialSP = strataPlanSelect.value;
     if (initialSP) {
