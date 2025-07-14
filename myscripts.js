@@ -163,12 +163,22 @@ const initializeApp = (user) => {
 // --- User Management (Admin) ---
 const loadUsers = async () => {
     try {
+        const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+        if (!sessionUser) return;
+
         const result = await postToServer({ action: 'getUsers' });
         if (result.success) {
             userList.innerHTML = '';
             result.users.forEach(user => {
                 const li = document.createElement('li');
-                li.innerHTML = `<span>${user.username} (${user.role})</span> <button class="delete-btn" data-username="${user.username}">Remove</button>`;
+                const isCurrentUser = user.username === sessionUser.username;
+                
+                // MODIFIED: Only show the "Remove" button if it's not the currently logged-in user
+                const removeButtonHtml = isCurrentUser 
+                    ? '' 
+                    : `<button class="delete-btn" data-username="${user.username}">Remove</button>`;
+
+                li.innerHTML = `<span>${user.username} (${user.role})</span> ${removeButtonHtml}`;
                 userList.appendChild(li);
             });
         }
@@ -212,13 +222,7 @@ const handleAddUser = async () => {
 const handleRemoveUser = async (e) => {
     if (!e.target.matches('.delete-btn[data-username]')) return;
     const username = e.target.dataset.username;
-    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
-    if (username === sessionUser.username) {
-        statusEl.textContent = 'You cannot remove yourself.';
-        statusEl.style.color = 'red';
-        return;
-    }
-
+    
     const confirmRes = await showModal(`Are you sure you want to remove user "${username}"?`, { confirmText: 'Yes, Remove' });
     if (!confirmRes.confirmed) return;
 
@@ -589,14 +593,16 @@ const handleEmailPdf = async () => {
 
 const handleClearCache = async () => {
     const modalResponse = await showModal(
-        "Are you sure you want to clear all cached data? This will remove any unsynced submissions and log you out of the current strata plan.",
+        "Are you sure you want to clear all cached data? This will remove any unsynced submissions.",
         { confirmText: 'Yes, Clear Data', cancelText: 'Cancel' }
     );
     if (modalResponse.confirmed) {
         localStorage.removeItem('submissionQueue');
         clearStrataCache(); 
         document.cookie = 'selectedSP=; Max-Age=0; path=/;';
-        location.reload();
+        // No full reload, just clear the UI
+        resetUiOnPlanChange();
+        updateDisplay(strataPlanSelect.value);
     }
 };
 
