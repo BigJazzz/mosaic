@@ -145,7 +145,6 @@ const initializeApp = (user) => {
         loadUsers();
     }
     
-    // MODIFIED: Handle SP Access restrictions
     if (user.spAccess) {
         strataPlanWrapper.classList.add('hidden');
         populateStrataPlans().then(() => {
@@ -177,7 +176,7 @@ const loadUsers = async () => {
 
         const result = await postToServer({ action: 'getUsers' });
         if (result.success) {
-            userListBody.innerHTML = ''; // MODIFIED: Target table body
+            userListBody.innerHTML = '';
             result.users.forEach(user => {
                 const tr = document.createElement('tr');
                 const isCurrentUser = user.username === sessionUser.username;
@@ -208,7 +207,7 @@ const handleAddUser = async () => {
     if (!roleRes.confirmed || !roleRes.value) return;
     
     const spAccessRes = await showModal("Enter SP Access number (or leave blank for all):", { showInput: true, confirmText: 'Add User' });
-    if (!spAccessRes.confirmed) return; // Allow blank value
+    if (!spAccessRes.confirmed) return;
 
     const role = roleRes.value.trim();
     if (role !== 'Admin' && role !== 'User') {
@@ -573,6 +572,7 @@ const handleDelete = async (lotNumber) => {
     }
 };
 
+// MODIFIED: Reverted to fire-and-forget for PDF generation
 const handleEmailPdf = async () => {
     const sp = strataPlanSelect.value;
     if (!sp) {
@@ -591,14 +591,25 @@ const handleEmailPdf = async () => {
         statusEl.textContent = 'Sending request... The PDF will be emailed shortly.';
         statusEl.style.color = 'blue';
         emailPdfBtn.disabled = true;
+
+        // Fire-and-forget
+        const body = { action: 'emailPdfReport', sp, email };
+        const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+        if (sessionUser) {
+            body.user = sessionUser;
+        }
+        
         fetch(APPS_SCRIPT_URL, {
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ action: 'emailPdfReport', sp: sp, email: email })
+            body: JSON.stringify(body)
         }).catch(err => {
+            // This error is expected for long-running scripts and can be ignored.
             console.warn("Ignoring expected 'Failed to fetch' error for long-running process.", err);
         });
+
+        // Give user feedback immediately
         setTimeout(() => {
             statusEl.textContent = `Report generation started. Please check ${email} in a moment.`;
             statusEl.style.color = 'green';
@@ -678,14 +689,12 @@ proxyCheckbox.addEventListener('change', () => {
 
 // --- Initial Load ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Auth listeners
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
     addUserBtn.addEventListener('click', handleAddUser);
-    userListBody.addEventListener('click', handleRemoveUser); // MODIFIED: Listener on table body
+    userListBody.addEventListener('click', handleRemoveUser);
     changePasswordBtn.addEventListener('click', handleChangePassword);
     
-    // App listeners
     attendeeTableBody.addEventListener('click', (e) => {
         if (e.target.matches('.delete-btn[data-submission-id]')) {
             handleDeleteQueued(e.target.dataset.submissionId);
