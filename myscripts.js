@@ -88,7 +88,6 @@ const cacheAllNames = async (sp) => {
             localStorage.removeItem(cacheKey);
         }
     }
-
     try {
         const response = await fetch(`${APPS_SCRIPT_URL}?action=getAllNamesForPlan&sp=${sp}`);
         const data = await response.json();
@@ -98,9 +97,7 @@ const cacheAllNames = async (sp) => {
             localStorage.setItem(cacheKey, JSON.stringify(newCacheItem));
             lotInput.disabled = false;
             checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
-        } else {
-            throw new Error(data.error);
-        }
+        } else { throw new Error(data.error); }
     } catch (error) {
          checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
     }
@@ -120,13 +117,9 @@ const updateSyncButton = () => {
 };
 
 const syncSubmissions = async () => {
-    if (isSyncing || navigator.onLine === false) {
-        return;
-    }
+    if (isSyncing || navigator.onLine === false) return;
     const queue = getSubmissionQueue();
-    if (queue.length === 0) {
-        return;
-    }
+    if (queue.length === 0) return;
 
     isSyncing = true;
     statusEl.textContent = `Syncing ${queue.length} items...`;
@@ -138,9 +131,7 @@ const syncSubmissions = async () => {
 
     try {
         const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'text/plain' },
+            method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ action: 'batchSubmit', submissions: batchToSend })
         });
         const result = await response.json();
@@ -151,9 +142,7 @@ const syncSubmissions = async () => {
             saveSubmissionQueue(newQueue);
             statusEl.textContent = `Successfully synced ${batchToSend.length} items.`;
             statusEl.style.color = 'green';
-        } else {
-            throw new Error(result.error);
-        }
+        } else { throw new Error(result.error); }
     } catch (error) {
         statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
@@ -348,15 +337,53 @@ const handleDelete = async (lotNumber) => {
     if (modalResponse.confirmed) {
         statusEl.textContent = `Deleting Lot ${lotNumber}...`;
         try {
-            await fetch(APPS_SCRIPT_URL, {
+            const response = await fetch(APPS_SCRIPT_URL, {
                 method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({ action: 'delete', lot: lotNumber, sp: sp })
             });
-            statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-            fetchInitialData();
+            const result = await response.json();
+            if (result.success) {
+                statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
+                fetchInitialData();
+            } else { throw new Error(result.error); }
         } catch (error) {
+            console.error('Deletion Error:', error);
             statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
         }
+    }
+};
+
+const handleEmailPdf = async () => {
+    const sp = strataPlanSelect.value;
+    if (!sp) {
+        statusEl.textContent = 'Please select a Strata Plan first.';
+        statusEl.style.color = 'red';
+        return;
+    }
+    const modalResponse = await showModal("Enter the email address to send the PDF report to:", { showInput: true, confirmText: 'Send Email' });
+    if (modalResponse.confirmed && modalResponse.value) {
+        const email = modalResponse.value;
+        if (!/^\S+@\S+\.\S+$/.test(email)) {
+            statusEl.textContent = 'Invalid email address.';
+            statusEl.style.color = 'red';
+            return;
+        }
+        statusEl.textContent = 'Sending request... The PDF will be emailed shortly.';
+        statusEl.style.color = 'blue';
+        emailPdfBtn.disabled = true;
+        fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ action: 'emailPdfReport', sp: sp, email: email })
+        }).catch(err => {
+            console.warn("Ignoring expected 'Failed to fetch' error for long-running process.", err);
+        });
+        setTimeout(() => {
+            statusEl.textContent = `Report generation started. Please check ${email} in a moment.`;
+            statusEl.style.color = 'green';
+            emailPdfBtn.disabled = false;
+        }, 1500);
     }
 };
 
