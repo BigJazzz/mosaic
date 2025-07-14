@@ -8,12 +8,14 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 2rem; background-color: #f8f9fa; color: #333; }
         .container { max-width: 600px; margin: auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
-        h1 { font-size: 1.75rem; color: #333; margin: 0; flex-grow: 1; }
+        h1, h2 { color: #333; }
+        h1 { font-size: 1.75rem; margin: 0; flex-grow: 1; }
+        .hidden { display: none; }
         #quorum-display { padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold; color: white; text-align: center; line-height: 1.2; }
         #quorum-display small { font-weight: normal; font-size: 0.8em; }
         .form-group { margin-bottom: 1rem; }
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        input[type="text"], select { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1rem; }
+        input[type="text"], input[type="password"], select { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1rem; }
         #checkbox-container { border: 1px solid #eee; padding: 1rem; border-radius: 4px; min-height: 50px; }
         .checkbox-item { display: block; margin-bottom: 0.5rem; }
         button { background-color: #007bff; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; transition: background-color 0.2s; }
@@ -23,17 +25,20 @@
         #email-pdf-btn:hover { background-color: #138496; }
         #sync-btn { background-color: #6c757d; margin-top: 0.5rem; }
         #sync-btn:hover { background-color: #5a6268; }
-        #clear-cache-btn { background-color: #dc3545; margin-top: 0.5rem; }
-        #clear-cache-btn:hover { background-color: #c82333; }
-        #status { text-align: center; margin-top: 1rem; font-weight: bold; min-height: 1.2em; }
-        .attendee-section { margin-top: 2rem; }
+        #clear-cache-btn, #logout-btn { background-color: #dc3545; margin-top: 0.5rem; }
+        #clear-cache-btn:hover, #logout-btn:hover { background-color: #c82333; }
+        #status, #login-status { text-align: center; margin-top: 1rem; font-weight: bold; min-height: 1.2em; }
+        .attendee-section, .user-management-section { margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1.5rem; }
         .attendee-section h2 { display: flex; justify-content: space-between; align-items: center; }
         .attendee-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         .attendee-table th, .attendee-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; vertical-align: middle; }
         .attendee-table th { background-color: #f2f2f2; }
         .delete-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
         #company-rep-group, #proxy-holder-group { display: none; }
-        
+        .user-list { list-style-type: none; padding: 0; }
+        .user-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #eee; }
+        .user-list li:last-child { border-bottom: none; }
+
         /* Modal Styles */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: white; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
@@ -48,60 +53,97 @@
 <body>
 
     <div class="container">
-        <div class="form-group">
-            <label for="strata-plan-select">Strata Plan</label>
-            <select id="strata-plan-select" disabled>
-                <option value="">Loading plans...</option>
-            </select>
+        <!-- Login Section -->
+        <div id="login-section">
+            <h1>Login</h1>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit">Login</button>
+                <p id="login-status"></p>
+            </form>
         </div>
-        <div class="header-container">
-            <h1>Attendance Form</h1>
-            <div id="quorum-display">Quorum: ...%</div>
-        </div>
-        <form id="attendance-form">
-            <div class="form-group">
-                <label for="lot-number">Lot Number</label>
-                <input type="text" id="lot-number" required disabled>
+
+        <!-- Main App Section (Initially Hidden) -->
+        <div id="main-app" class="hidden">
+            <div class="header-container">
+                <h1>Attendance Form</h1>
+                <div id="quorum-display">Quorum: ...%</div>
             </div>
-            <hr>
-            <div class="form-group">
-                <label id="owner-label">Owner/s</label>
-                <div id="checkbox-container">
-                    <p>Select a Strata Plan to begin.</p>
+            <form id="attendance-form">
+                <div class="form-group">
+                    <label for="strata-plan-select">Strata Plan</label>
+                    <select id="strata-plan-select" disabled>
+                        <option value="">Loading plans...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="lot-number">Lot Number</label>
+                    <input type="text" id="lot-number" required disabled>
+                </div>
+                <hr>
+                <div class="form-group">
+                    <label id="owner-label">Owner/s</label>
+                    <div id="checkbox-container">
+                        <p>Select a Strata Plan to begin.</p>
+                    </div>
+                </div>
+                <div class="form-group" id="company-rep-group">
+                    <label for="company-rep">Company Representative</label>
+                    <input type="text" id="company-rep" placeholder="Enter representative's name (optional)">
+                </div>
+                <div class="form-group" id="proxy-holder-group">
+                    <label for="proxy-holder-lot">Proxy holder lot number/name</label>
+                    <input type="text" id="proxy-holder-lot" placeholder="Enter lot number or name holding the proxy">
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
+                    <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is a Proxy form?</label>
+                </div>
+                <button type="submit" id="submit-button">Submit</button>
+                <p id="status"></p>
+            </form>
+
+            <div class="attendee-section">
+                <h2>Current Attendees <span id="person-count"></span></h2>
+                <table class="attendee-table">
+                    <thead>
+                        <tr>
+                            <th>Lot</th>
+                            <th>Owner/Rep</th>
+                            <th>Company</th>
+                            <th>Delete</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendee-table-body"></tbody>
+                </table>
+                 <button type="button" id="email-pdf-btn">Email PDF Report</button>
+            </div>
+
+            <!-- User Management Section -->
+            <div class="user-management-section">
+                <h2>User Management</h2>
+                <p>Logged in as: <b id="user-display"></b></p>
+                <button type="button" id="change-password-btn">Change My Password</button>
+
+                <!-- Admin Panel (Initially Hidden) -->
+                <div id="admin-panel" class="hidden">
+                    <hr style="margin: 2rem 0;">
+                    <h3>Admin Panel</h3>
+                    <ul id="user-list" class="user-list"></ul>
+                    <button type="button" id="add-user-btn" style="background-color: #28a745; margin-top: 1rem;">Add New User</button>
                 </div>
             </div>
-            <div class="form-group" id="company-rep-group">
-                <label for="company-rep">Company Representative</label>
-                <input type="text" id="company-rep" placeholder="Enter representative's name (optional)">
-            </div>
-            <div class="form-group" id="proxy-holder-group">
-                <label for="proxy-holder-lot">Proxy holder lot number/name</label>
-                <input type="text" id="proxy-holder-lot" placeholder="Enter lot number or name holding the proxy">
-            </div>
-            <div class="form-group">
-                <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
-                <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is a Proxy form?</label>
-            </div>
-            <button type="submit" id="submit-button">Submit</button>
-            <p id="status"></p>
+
             <button type="button" id="sync-btn" disabled>Sync Submissions</button>
             <button type="button" id="clear-cache-btn">Clear Entire Cache</button>
-        </form>
-
-        <div class="attendee-section">
-            <h2>Current Attendees <span id="person-count"></span></h2>
-            <table class="attendee-table">
-                <thead>
-                    <tr>
-                        <th>Lot</th>
-                        <th>Owner/Rep</th>
-                        <th>Company</th>
-                        <th>Delete</th>
-                    </tr>
-                </thead>
-                <tbody id="attendee-table-body"></tbody>
-            </table>
-             <button type="button" id="email-pdf-btn">Email PDF Report</button>
+            <button type="button" id="logout-btn">Logout</button>
         </div>
     </div>
 
