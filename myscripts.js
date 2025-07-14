@@ -28,6 +28,8 @@ const modalCancelBtn = document.getElementById('modal-cancel-btn');
 let fetchedNames = [];
 let strataPlanCache = null;
 let isSyncing = false;
+let currentSyncedAttendees = []; // Holds the server-authoritative list of attendees
+let currentTotalLots = 0; // Holds the server-authoritative total lot count
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
 
@@ -182,7 +184,7 @@ const syncSubmissions = async () => {
         statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
     } finally {
-        console.log('[CLIENT] Sync process finished.');
+        console.log('[CLIENT] Sync process finished. Refetching server state.');
         isSyncing = false;
         await checkAndLoadMeeting(strataPlanSelect.value); 
         updateSyncButton();
@@ -190,7 +192,27 @@ const syncSubmissions = async () => {
 };
 
 // --- UI & Rendering ---
+
+// NEW: Master display update function
+const updateDisplay = (sp) => {
+    if (!sp) return;
+
+    const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
+    const allAttendees = [...currentSyncedAttendees, ...queuedAttendees];
+    
+    // Get unique lots for quorum calculation
+    const attendedLots = new Set();
+    allAttendees.forEach(attendee => attendedLots.add(String(attendee.lot)));
+
+    renderAttendeeTable(allAttendees);
+    updateQuorumDisplay(attendedLots.size, currentTotalLots);
+};
+
 const resetUiOnPlanChange = () => {
+    // MODIFIED: Reset global state on plan change
+    currentSyncedAttendees = [];
+    currentTotalLots = 0;
+
     attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Select a plan to see attendees.</td></tr>`;
     personCountSpan.textContent = `(0 people)`;
     quorumDisplay.innerHTML = `Quorum: ...%`;
@@ -281,7 +303,6 @@ const populateStrataPlans = async () => {
     }
 };
 
-// NEW: Combined workflow for checking columns and fetching data
 const checkAndLoadMeeting = async (sp) => {
     if (!sp) return;
     
@@ -307,26 +328,28 @@ const checkAndLoadMeeting = async (sp) => {
                 initialData = await postToServer({ action: 'createAndFetchInitialData', sp, meetingType });
             } else {
                 console.log('[CLIENT] User cancelled meeting setup.');
-                resetUiOnPlanChange(); // Reset to a clean state
-                return; // Stop execution if user cancels
+                resetUiOnPlanChange();
+                return;
             }
         }
 
-        // Process the data from either path
         if (initialData && initialData.success) {
-            updateQuorumDisplay(initialData.attendanceCount, initialData.totalLots);
-            const syncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
-            const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
-            renderAttendeeTable([...syncedAttendees, ...queuedAttendees]);
+            // MODIFIED: Store server state in global variables
+            currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
+            currentTotalLots = initialData.totalLots;
+            
+            // MODIFIED: Call the master display function
+            updateDisplay(sp);
         } else {
             throw new Error(initialData ? initialData.error : "Failed to get initial data.");
         }
 
     } catch (error) {
         console.error("[CLIENT] A critical error occurred during meeting load:", error);
-        updateQuorumDisplay();
-        const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
-        renderAttendeeTable(queuedAttendees);
+        // MODIFIED: Reset and update display on error
+        currentSyncedAttendees = [];
+        currentTotalLots = 0;
+        updateDisplay(sp);
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'red';
     }
@@ -381,7 +404,8 @@ const handleDeleteQueued = (submissionId) => {
     let queue = getSubmissionQueue();
     queue = queue.filter(item => item.submissionId !== submissionId);
     saveSubmissionQueue(queue);
-    checkAndLoadMeeting(strataPlanSelect.value);
+    // MODIFIED: Instantly update the display
+    updateDisplay(strataPlanSelect.value);
     updateSyncButton();
 };
 
@@ -395,6 +419,7 @@ const handleDelete = async (lotNumber) => {
             const result = await postToServer({ action: 'delete', lot: lotNumber, sp: sp });
             if (result.success) {
                 statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
+                // MODIFIED: Re-check and load after confirmed server deletion
                 checkAndLoadMeeting(sp);
             } else { throw new Error(result.error); }
         } catch (error) {
@@ -497,6 +522,10 @@ const handleFormSubmit = async (event) => {
     saveSubmissionQueue(queue);
     console.log('[CLIENT] Submission added to local queue.');
 
+    // MODIFIED: Instantly update the UI instead of re-fetching
+    updateDisplay(sp);
+    updateSyncButton();
+
     statusEl.textContent = `Lot ${lot} queued for submission.`;
     statusEl.style.color = 'green';
     form.reset();
@@ -504,8 +533,7 @@ const handleFormSubmit = async (event) => {
     proxyHolderGroup.style.display = 'none';
     checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
     lotInput.focus();
-    updateSyncButton();
-    checkAndLoadMeeting(sp);
+    
     setTimeout(() => { if (statusEl.textContent === `Lot ${lot} queued for submission.`) statusEl.textContent = ''; }, 3000);
 };
 
