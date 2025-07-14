@@ -1,4 +1,17 @@
 // --- DOM Elements ---
+const loginSection = document.getElementById('login-section');
+const mainAppSection = document.getElementById('main-app');
+const loginForm = document.getElementById('login-form');
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
+const loginStatus = document.getElementById('login-status');
+const userDisplay = document.getElementById('user-display');
+const adminPanel = document.getElementById('admin-panel');
+const userList = document.getElementById('user-list');
+const addUserBtn = document.getElementById('add-user-btn');
+const changePasswordBtn = document.getElementById('change-password-btn');
+const logoutBtn = document.getElementById('logout-btn');
+
 const lotInput = document.getElementById('lot-number');
 const checkboxContainer = document.getElementById('checkbox-container');
 const ownerLabel = document.getElementById('owner-label');
@@ -28,13 +41,18 @@ const modalCancelBtn = document.getElementById('modal-cancel-btn');
 let fetchedNames = [];
 let strataPlanCache = null;
 let isSyncing = false;
-let currentSyncedAttendees = []; // Holds the server-authoritative list of attendees
-let currentTotalLots = 0; // Holds the server-authoritative total lot count
+let currentSyncedAttendees = [];
+let currentTotalLots = 0;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 // --- Helper for making POST requests ---
 const postToServer = async (body) => {
+    // Add user credentials to every request if logged in
+    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+    if (sessionUser) {
+        body.user = sessionUser;
+    }
     console.log('[CLIENT] Making POST request to server with body:', body);
     const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
@@ -48,15 +66,22 @@ const postToServer = async (body) => {
     }
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
+    if (!jsonResponse.success) {
+      // Handle server-side errors, including auth errors
+      if (jsonResponse.error && jsonResponse.error.includes("Authentication failed")) {
+          handleLogout(); // Force logout on auth failure
+      }
+    }
     return jsonResponse;
 };
 
 // --- Modal Logic ---
 let modalResolve = null;
-const showModal = (text, { showInput = false, confirmText = 'Confirm', cancelText = 'Cancel', isHtml = false } = {}) => {
+const showModal = (text, { showInput = false, inputType = 'text', confirmText = 'Confirm', cancelText = 'Cancel', isHtml = false } = {}) => {
     if (isHtml) { modalText.innerHTML = text; } 
     else { modalText.textContent = text; }
     modalInput.style.display = showInput ? 'block' : 'none';
+    modalInput.type = inputType;
     modalInput.value = '';
     modalConfirmBtn.textContent = confirmText;
     modalCancelBtn.textContent = cancelText;
@@ -78,6 +103,158 @@ modalInput.addEventListener('keydown', (event) => {
         modalConfirmBtn.click();
     }
 });
+
+// --- Authentication & Session Logic ---
+const handleLogin = async (event) => {
+    event.preventDefault();
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+    if (!username || !password) {
+        loginStatus.textContent = 'Username and password are required.';
+        loginStatus.style.color = 'red';
+        return;
+    }
+    loginStatus.textContent = 'Logging in...';
+    loginStatus.style.color = 'blue';
+
+    try {
+        const result = await postToServer({ action: 'loginUser', username, password });
+        if (result.success) {
+            loginStatus.textContent = '';
+            const user = { username: result.username, role: result.role };
+            sessionStorage.setItem('attendanceUser', JSON.stringify(user));
+            initializeApp(user);
+        } else {
+            throw new Error(result.error || 'Invalid username or password.');
+        }
+    } catch (error) {
+        loginStatus.textContent = `Login failed: ${error.message}`;
+        loginStatus.style.color = 'red';
+    }
+};
+
+const handleLogout = () => {
+    sessionStorage.removeItem('attendanceUser');
+    location.reload();
+};
+
+const initializeApp = (user) => {
+    loginSection.classList.add('hidden');
+    mainAppSection.classList.remove('hidden');
+    userDisplay.textContent = `${user.username} (${user.role})`;
+
+    if (user.role === 'Admin') {
+        adminPanel.classList.remove('hidden');
+        loadUsers();
+    }
+
+    populateStrataPlans().then(() => {
+        const initialSP = strataPlanSelect.value;
+        if (initialSP) {
+            cacheAllNames(initialSP).then(() => {
+                checkAndLoadMeeting(initialSP);
+            });
+        }
+    });
+    updateSyncButton();
+    setInterval(syncSubmissions, 60000);
+};
+
+// --- User Management (Admin) ---
+const loadUsers = async () => {
+    try {
+        const result = await postToServer({ action: 'getUsers' });
+        if (result.success) {
+            userList.innerHTML = '';
+            result.users.forEach(user => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>${user.username} (${user.role})</span> <button class="delete-btn" data-username="${user.username}">Remove</button>`;
+                userList.appendChild(li);
+            });
+        }
+    } catch (error) {
+        console.error('Failed to load users:', error);
+    }
+};
+
+const handleAddUser = async () => {
+    const usernameRes = await showModal("Enter new user's username:", { showInput: true, confirmText: 'Next' });
+    if (!usernameRes.confirmed || !usernameRes.value) return;
+    
+    const passwordRes = await showModal("Enter new user's password:", { showInput: true, inputType: 'password', confirmText: 'Next' });
+    if (!passwordRes.confirmed || !passwordRes.value) return;
+
+    const roleRes = await showModal("Enter role (Admin or User):", { showInput: true, confirmText: 'Add User' });
+    if (!roleRes.confirmed || !roleRes.value) return;
+
+    const role = roleRes.value.trim();
+    if (role !== 'Admin' && role !== 'User') {
+        statusEl.textContent = 'Invalid role. Must be "Admin" or "User".';
+        statusEl.style.color = 'red';
+        return;
+    }
+
+    try {
+        const result = await postToServer({ action: 'addUser', username: usernameRes.value, password: passwordRes.value, role });
+        if (result.success) {
+            statusEl.textContent = 'User added successfully.';
+            statusEl.style.color = 'green';
+            loadUsers();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        statusEl.textContent = `Failed to add user: ${error.message}`;
+        statusEl.style.color = 'red';
+    }
+};
+
+const handleRemoveUser = async (e) => {
+    if (!e.target.matches('.delete-btn[data-username]')) return;
+    const username = e.target.dataset.username;
+    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+    if (username === sessionUser.username) {
+        statusEl.textContent = 'You cannot remove yourself.';
+        statusEl.style.color = 'red';
+        return;
+    }
+
+    const confirmRes = await showModal(`Are you sure you want to remove user "${username}"?`, { confirmText: 'Yes, Remove' });
+    if (!confirmRes.confirmed) return;
+
+    try {
+        const result = await postToServer({ action: 'removeUser', username });
+        if (result.success) {
+            statusEl.textContent = 'User removed successfully.';
+            statusEl.style.color = 'green';
+            loadUsers();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        statusEl.textContent = `Failed to remove user: ${error.message}`;
+        statusEl.style.color = 'red';
+    }
+};
+
+// --- User Management (Self) ---
+const handleChangePassword = async () => {
+    const passwordRes = await showModal("Enter your new password:", { showInput: true, inputType: 'password', confirmText: 'Change Password' });
+    if (!passwordRes.confirmed || !passwordRes.value) return;
+
+    try {
+        const result = await postToServer({ action: 'changePassword', newPassword: passwordRes.value });
+        if (result.success) {
+            statusEl.textContent = 'Password changed successfully.';
+            statusEl.style.color = 'green';
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        statusEl.textContent = `Failed to change password: ${error.message}`;
+        statusEl.style.color = 'red';
+    }
+};
 
 // --- Caching & Queue Logic ---
 const getSubmissionQueue = () => JSON.parse(localStorage.getItem('submissionQueue') || '[]');
@@ -143,19 +320,10 @@ const updateSyncButton = () => {
 };
 
 const syncSubmissions = async () => {
-    if (isSyncing) {
-        console.log('[CLIENT] Sync already in progress. Skipping.');
-        return;
-    }
-    if (navigator.onLine === false) {
-        console.log('[CLIENT] Offline. Skipping sync.');
-        return;
-    }
-
+    if (isSyncing || !navigator.onLine) return;
     const queue = getSubmissionQueue();
     if (queue.length === 0) return;
     
-    console.log(`[CLIENT] Starting sync. Found ${queue.length} items in queue.`);
     isSyncing = true;
     statusEl.textContent = `Syncing ${queue.length} items...`;
     statusEl.style.color = 'blue';
@@ -163,12 +331,9 @@ const syncSubmissions = async () => {
     document.querySelectorAll('.delete-btn[data-submission-id]').forEach(btn => btn.disabled = true);
 
     const batchToSend = [...queue];
-    console.log('[CLIENT] Batch to send:', batchToSend);
-
     try {
         const result = await postToServer({ action: 'batchSubmit', submissions: batchToSend });
         if (result.success) {
-            console.log('[CLIENT] Sync successful. Clearing sent items from local queue.');
             const currentQueue = getSubmissionQueue();
             const sentIds = new Set(batchToSend.map(item => item.submissionId));
             const newQueue = currentQueue.filter(item => !sentIds.has(item.submissionId));
@@ -176,7 +341,6 @@ const syncSubmissions = async () => {
             statusEl.textContent = `Successfully synced ${batchToSend.length} items.`;
             statusEl.style.color = 'green';
         } else {
-            console.error('[CLIENT] Server indicated sync failure.', result.error);
             throw new Error(result.error);
         }
     } catch (error) {
@@ -184,7 +348,6 @@ const syncSubmissions = async () => {
         statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
     } finally {
-        console.log('[CLIENT] Sync process finished. Refetching server state.');
         isSyncing = false;
         await checkAndLoadMeeting(strataPlanSelect.value); 
         updateSyncButton();
@@ -192,27 +355,19 @@ const syncSubmissions = async () => {
 };
 
 // --- UI & Rendering ---
-
-// NEW: Master display update function
 const updateDisplay = (sp) => {
     if (!sp) return;
-
     const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
     const allAttendees = [...currentSyncedAttendees, ...queuedAttendees];
-    
-    // Get unique lots for quorum calculation
     const attendedLots = new Set();
     allAttendees.forEach(attendee => attendedLots.add(String(attendee.lot)));
-
     renderAttendeeTable(allAttendees);
     updateQuorumDisplay(attendedLots.size, currentTotalLots);
 };
 
 const resetUiOnPlanChange = () => {
-    // MODIFIED: Reset global state on plan change
     currentSyncedAttendees = [];
     currentTotalLots = 0;
-
     attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Select a plan to see attendees.</td></tr>`;
     personCountSpan.textContent = `(0 people)`;
     quorumDisplay.innerHTML = `Quorum: ...%`;
@@ -223,7 +378,7 @@ const resetUiOnPlanChange = () => {
 };
 
 const renderStrataPlans = (plans) => {
-    if (!plans) { return; }
+    if (!plans) return;
     strataPlanSelect.innerHTML = '<option value="">Select a plan...</option>';
     plans.sort((a, b) => a.sp - b.sp);
     plans.forEach(plan => {
@@ -240,24 +395,18 @@ const renderAttendeeTable = (attendees) => {
     const syncedCount = attendees.filter(item => item.status !== 'queued').length;
     const personLabel = (syncedCount === 1) ? 'person' : 'people';
     personCountSpan.textContent = `(${syncedCount} ${personLabel})`;
-    
     attendeeTableBody.innerHTML = '';
     if (!attendees || attendees.length === 0) {
         attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
         return;
     }
-
     attendees.sort((a, b) => a.lot - b.lot);
     attendees.forEach(item => {
         const isQueued = item.status === 'queued';
         const name = item.name || (item.proxyHolderLot ? `Proxy - Lot ${item.proxyHolderLot}` : item.names.join(', '));
         const isProxy = String(name).startsWith('Proxy - Lot');
         const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(name);
-        
-        let ownerRepName = '';
-        let companyName = '';
-        let rowColor = isQueued ? '#f5e0df' : '#d4e3c1';
-
+        let ownerRepName = '', companyName = '', rowColor = isQueued ? '#f5e0df' : '#d4e3c1';
         if (isProxy) {
             ownerRepName = name;
             if (!isQueued) rowColor = '#c1e1e3';
@@ -269,13 +418,11 @@ const renderAttendeeTable = (attendees) => {
         } else {
             ownerRepName = name;
         }
-        
         const row = document.createElement('tr');
         row.style.backgroundColor = rowColor;
         const deleteButton = isQueued 
             ? `<button class="delete-btn" data-type="queued" data-submission-id="${item.submissionId}">Delete</button>`
             : `<button class="delete-btn" data-type="synced" data-lot="${item.lot}">Delete</button>`;
-            
         row.innerHTML = `<td>${item.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td>${deleteButton}</td>`;
         attendeeTableBody.appendChild(row);
     });
@@ -305,48 +452,32 @@ const populateStrataPlans = async () => {
 
 const checkAndLoadMeeting = async (sp) => {
     if (!sp) return;
-    
-    console.log(`[CLIENT] Checking for today's columns for SP ${sp}.`);
     quorumDisplay.textContent = 'Loading...';
     attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>`;
-
     try {
         const columnCheck = await postToServer({ action: 'checkTodaysColumns', sp });
         if (!columnCheck.success) throw new Error(columnCheck.error);
-
         let initialData;
         if (columnCheck.columnsExist) {
-            console.log(`[CLIENT] Columns exist. Fetching initial data.`);
             initialData = await postToServer({ action: 'getInitialData', sp });
         } else {
-            console.log(`[CLIENT] Columns do not exist. Prompting for Meeting Type.`);
             const modalResponse = await showModal("Today's meeting has not been set up. Please enter the meeting type (e.g., AGM, EGM):", { showInput: true, confirmText: 'Set Up Meeting' });
-            
             if (modalResponse.confirmed && modalResponse.value) {
-                const meetingType = modalResponse.value;
-                console.log(`[CLIENT] Creating columns for meeting type: ${meetingType}`);
-                initialData = await postToServer({ action: 'createAndFetchInitialData', sp, meetingType });
+                initialData = await postToServer({ action: 'createAndFetchInitialData', sp, meetingType: modalResponse.value });
             } else {
-                console.log('[CLIENT] User cancelled meeting setup.');
                 resetUiOnPlanChange();
                 return;
             }
         }
-
         if (initialData && initialData.success) {
-            // MODIFIED: Store server state in global variables
             currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
             currentTotalLots = initialData.totalLots;
-            
-            // MODIFIED: Call the master display function
             updateDisplay(sp);
         } else {
             throw new Error(initialData ? initialData.error : "Failed to get initial data.");
         }
-
     } catch (error) {
         console.error("[CLIENT] A critical error occurred during meeting load:", error);
-        // MODIFIED: Reset and update display on error
         currentSyncedAttendees = [];
         currentTotalLots = 0;
         updateDisplay(sp);
@@ -355,16 +486,13 @@ const checkAndLoadMeeting = async (sp) => {
     }
 };
 
-
 const fetchNames = () => {
     const lot = lotInput.value.trim();
-    console.log(`[CLIENT] Fetching names for lot: ${lot}`);
     companyRepGroup.style.display = 'none';
     companyRepInput.value = '';
     fetchedNames = [];
     if (!lot) { checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>'; return; }
-    if (!strataPlanCache) { checkboxContainer.innerHTML = `<p style="color: red;">Strata data is not loaded. Please re-select the plan.</p>`; return; }
-
+    if (!strataPlanCache) { checkboxContainer.innerHTML = `<p style="color: red;">Strata data is not loaded.</p>`; return; }
     const namesFromCache = strataPlanCache[lot];
     if (namesFromCache) {
         const mainContactName = namesFromCache[0] || '';
@@ -374,7 +502,6 @@ const fetchNames = () => {
         const firstWord = mainContactName.split(' ')[0] || '';
         const firstNameIsInitial = /^[A-Z]\.?$/.test(firstWord);
         if (!mainContactName || hasTitles || firstNameIsInitial) { finalNameString = fullNameOnTitle; }
-
         const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(finalNameString);
         let parsedNames = [];
         if (isCompany) {
@@ -400,11 +527,9 @@ const fetchNames = () => {
 };
 
 const handleDeleteQueued = (submissionId) => {
-    console.log(`[CLIENT] Deleting queued item with ID: ${submissionId}`);
     let queue = getSubmissionQueue();
     queue = queue.filter(item => item.submissionId !== submissionId);
     saveSubmissionQueue(queue);
-    // MODIFIED: Instantly update the display
     updateDisplay(strataPlanSelect.value);
     updateSyncButton();
 };
@@ -419,7 +544,6 @@ const handleDelete = async (lotNumber) => {
             const result = await postToServer({ action: 'delete', lot: lotNumber, sp: sp });
             if (result.success) {
                 statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
-                // MODIFIED: Re-check and load after confirmed server deletion
                 checkAndLoadMeeting(sp);
             } else { throw new Error(result.error); }
         } catch (error) {
@@ -468,24 +592,17 @@ const handleClearCache = async () => {
         "Are you sure you want to clear all cached data? This will remove any unsynced submissions and log you out of the current strata plan.",
         { confirmText: 'Yes, Clear Data', cancelText: 'Cancel' }
     );
-
     if (modalResponse.confirmed) {
-        console.log('[CLIENT] User confirmed. Clearing all cached data.');
         localStorage.removeItem('submissionQueue');
         clearStrataCache(); 
         document.cookie = 'selectedSP=; Max-Age=0; path=/;';
-        console.log('[CLIENT] Cache and cookies cleared.');
         location.reload();
-    } else {
-        console.log('[CLIENT] User cancelled cache clearing.');
     }
 };
-
 
 // --- Event Handlers ---
 const handleFormSubmit = async (event) => {
     event.preventDefault();
-    console.log('[CLIENT] Form submit event triggered.');
     const sp = strataPlanSelect.value;
     const lot = lotInput.value.trim();
     if (!sp || !lot) {
@@ -493,13 +610,11 @@ const handleFormSubmit = async (event) => {
         statusEl.style.color = 'red';
         return;
     }
-    
     let selectedNames = Array.from(document.querySelectorAll('input[name="attendee"]:checked')).map(cb => cb.value);
     const isFinancial = financialCheckbox.checked;
     const isProxy = proxyCheckbox.checked;
     const companyRep = companyRepInput.value.trim();
     const proxyHolderLot = proxyHolderLotInput.value.trim();
-
     if (isProxy) {
         if (!proxyHolderLot) { statusEl.textContent = 'Please enter the Proxy Holder Lot Number.'; statusEl.style.color = 'red'; return; }
         selectedNames = [];
@@ -510,22 +625,15 @@ const handleFormSubmit = async (event) => {
         }
         if (selectedNames.length === 0) { statusEl.textContent = 'Please select at least one owner.'; statusEl.style.color = 'red'; return; }
     }
-
     const submission = {
         submissionId: `sub_${Date.now()}_${Math.random()}`,
         sp, lot, names: selectedNames, financial: isFinancial, proxyHolderLot, companyRep
     };
-    console.log('[CLIENT] Form submission validated. Creating submission object:', submission);
-
     const queue = getSubmissionQueue();
     queue.push(submission);
     saveSubmissionQueue(queue);
-    console.log('[CLIENT] Submission added to local queue.');
-
-    // MODIFIED: Instantly update the UI instead of re-fetching
     updateDisplay(sp);
     updateSyncButton();
-
     statusEl.textContent = `Lot ${lot} queued for submission.`;
     statusEl.style.color = 'green';
     form.reset();
@@ -533,7 +641,6 @@ const handleFormSubmit = async (event) => {
     proxyHolderGroup.style.display = 'none';
     checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
     lotInput.focus();
-    
     setTimeout(() => { if (statusEl.textContent === `Lot ${lot} queued for submission.`) statusEl.textContent = ''; }, 3000);
 };
 
@@ -548,44 +655,41 @@ proxyCheckbox.addEventListener('change', () => {
     }
 });
 
-strataPlanSelect.addEventListener('change', async (e) => {
-    const sp = e.target.value;
-    console.log(`[CLIENT] Strata Plan changed to: ${sp}`);
-    document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
-    resetUiOnPlanChange();
-    if (sp) {
-        await cacheAllNames(sp);
-        await checkAndLoadMeeting(sp);
-    }
-});
-
-attendeeTableBody.addEventListener('click', (e) => {
-    const target = e.target;
-    if (target && target.classList.contains('delete-btn')) {
-        const type = target.dataset.type;
-        if (type === 'queued') {
-            handleDeleteQueued(target.dataset.submissionId);
-        } else if (type === 'synced') {
-            handleDelete(target.dataset.lot);
+// --- Initial Load ---
+document.addEventListener('DOMContentLoaded', () => {
+    // Auth listeners
+    loginForm.addEventListener('submit', handleLogin);
+    logoutBtn.addEventListener('click', handleLogout);
+    addUserBtn.addEventListener('click', handleAddUser);
+    userList.addEventListener('click', handleRemoveUser);
+    changePasswordBtn.addEventListener('click', handleChangePassword);
+    
+    // App listeners
+    attendeeTableBody.addEventListener('click', (e) => {
+        if (e.target.matches('.delete-btn[data-submission-id]')) {
+            handleDeleteQueued(e.target.dataset.submissionId);
+        } else if (e.target.matches('.delete-btn[data-lot]')) {
+            handleDelete(e.target.dataset.lot);
         }
+    });
+    emailPdfBtn.addEventListener('click', handleEmailPdf);
+    syncBtn.addEventListener('click', syncSubmissions);
+    clearCacheBtn.addEventListener('click', handleClearCache);
+    lotInput.addEventListener('blur', fetchNames);
+    form.addEventListener('submit', handleFormSubmit);
+    strataPlanSelect.addEventListener('change', async (e) => {
+        const sp = e.target.value;
+        document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
+        resetUiOnPlanChange();
+        if (sp) {
+            await cacheAllNames(sp);
+            await checkAndLoadMeeting(sp);
+        }
+    });
+
+    // Check for existing session on load
+    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+    if (sessionUser) {
+        initializeApp(sessionUser);
     }
 });
-
-emailPdfBtn.addEventListener('click', handleEmailPdf);
-syncBtn.addEventListener('click', syncSubmissions);
-clearCacheBtn.addEventListener('click', handleClearCache);
-
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[CLIENT] Page loaded (DOMContentLoaded).');
-    await populateStrataPlans();
-    const initialSP = strataPlanSelect.value;
-    if (initialSP) {
-      await cacheAllNames(initialSP);
-      await checkAndLoadMeeting(initialSP);
-    }
-    updateSyncButton();
-    setInterval(syncSubmissions, 60000);
-});
-
-lotInput.addEventListener('blur', fetchNames);
-form.addEventListener('submit', handleFormSubmit);
