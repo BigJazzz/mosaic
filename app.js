@@ -1,12 +1,11 @@
 // fileName: app.js
 
-// Import configuration. Note: this requires the script tag in index.html to have type="module"
-import { APPS_SCRIPT_URL, CACHE_DURATION_MS, EMAIL_REGEX } from './config.js';
-
-// --- DOM Elements (Centralized) ---
+// --- DOM Elements ---
 const loginSection = document.getElementById('login-section');
 const mainAppSection = document.getElementById('main-app');
 const loginForm = document.getElementById('login-form');
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
 const userDisplay = document.getElementById('user-display');
 const adminPanel = document.getElementById('admin-panel');
 const addUserBtn = document.getElementById('add-user-btn');
@@ -43,48 +42,35 @@ let strataPlanCache = null;
 let isSyncing = false;
 let currentSyncedAttendees = [];
 let currentTotalLots = 0;
+// NOTE: These constants are now defined in utils.js or config.js in some versions.
+// This version assumes they are defined here for simplicity of a single-file fix.
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
+const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
-// The initializeApp function is now called from auth.js after a successful login.
-// It fetches the user's details securely using the stored token.
-window.initializeApp = async () => {
-    try {
-        // The backend must be updated to have a 'getUserDetails' action that validates the token
-        // and returns the user's { username, role, spAccess }.
-        const userData = await postToServer({ action: 'getUserDetails' });
-        if (!userData.success) throw new Error(userData.error || "Could not fetch user details.");
+// FIX: This initializeApp function now correctly accepts a user object as an argument.
+const initializeApp = (user) => {
+    loginSection.classList.add('hidden');
+    mainAppSection.classList.remove('hidden');
+    userDisplay.textContent = `${user.username} (${user.role})`;
 
-        const user = userData.user;
-        // Store user details for display purposes and role checks.
-        sessionStorage.setItem('attendanceUser', JSON.stringify(user));
-
-        loginSection.classList.add('hidden');
-        mainAppSection.classList.remove('hidden');
-        userDisplay.textContent = `${user.username} (${user.role})`;
-
-        if (user.role === 'Admin') {
-            adminPanel.classList.remove('hidden');
-            changeMeetingTypeBtn.classList.remove('hidden');
-            loadUsers();
-        }
-        
-        if (user.spAccess) {
-            strataPlanWrapper.classList.add('hidden');
-            populateStrataPlans().then(() => {
-                strataPlanSelect.value = user.spAccess;
-                handlePlanSelection(user.spAccess);
-            });
-        } else {
-            populateStrataPlans();
-        }
-
-        updateSyncButton();
-        setInterval(syncSubmissions, 60000); // Sync every 60 seconds.
-
-    } catch (error) {
-        console.error("Initialization failed:", error);
-        // If we can't get user details, the token is likely invalid, so log out.
-        handleLogout();
+    if (user.role === 'Admin') {
+        adminPanel.classList.remove('hidden');
+        changeMeetingTypeBtn.classList.remove('hidden');
+        loadUsers();
     }
+    
+    if (user.spAccess) {
+        strataPlanWrapper.classList.add('hidden');
+        populateStrataPlans().then(() => {
+            strataPlanSelect.value = user.spAccess;
+            handlePlanSelection(user.spAccess);
+        });
+    } else {
+        populateStrataPlans();
+    }
+
+    updateSyncButton();
+    setInterval(syncSubmissions, 60000);
 };
 
 // --- Core App Logic ---
@@ -116,7 +102,8 @@ const syncSubmissions = async () => {
     if (queue.length === 0) return;
     
     isSyncing = true;
-    showToast(`Syncing ${queue.length} items...`, 'info', 2000);
+    statusEl.textContent = `Syncing ${queue.length} items...`;
+    statusEl.style.color = 'blue';
     updateSyncButton();
     document.querySelectorAll('.delete-btn[data-submission-id]').forEach(btn => btn.disabled = true);
 
@@ -128,13 +115,16 @@ const syncSubmissions = async () => {
             const sentIds = new Set(batchToSend.map(item => item.submissionId));
             const newQueue = currentQueue.filter(item => !sentIds.has(item.submissionId));
             saveSubmissionQueue(newQueue);
-            showToast(`Successfully synced ${batchToSend.length} items.`, 'success');
+            statusEl.textContent = `Successfully synced ${batchToSend.length} items.`;
+            statusEl.style.color = 'green';
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
         console.error('[CLIENT] Sync failed! Error:', error);
-        showToast(`Sync failed. Items remain queued.`, 'error');
+        statusEl.textContent = `Sync failed. Items remain queued.`;
+        statusEl.style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     } finally {
         isSyncing = false;
         await checkAndLoadMeeting(strataPlanSelect.value); 
@@ -174,6 +164,7 @@ const cacheAllNames = async (sp) => {
     } catch (error) {
        console.error(`[CLIENT] Could not load data for SP ${sp}. Error:`, error);
        checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
+       if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -189,6 +180,7 @@ const populateStrataPlans = async () => {
     } catch (error) {
         console.error("[CLIENT] Could not fetch strata plans:", error);
         strataPlanSelect.innerHTML = '<option value="">Could not load plans</option>';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -237,7 +229,9 @@ const checkAndLoadMeeting = async (sp) => {
         currentSyncedAttendees = [];
         currentTotalLots = 0;
         updateDisplay(sp);
-        showToast(`Error: ${error.message}`, 'error');
+        statusEl.textContent = `Error: ${error.message}`;
+        statusEl.style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -248,58 +242,38 @@ const fetchNames = () => {
     fetchedNames = [];
     if (!lot) { checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>'; return; }
     if (!strataPlanCache) { checkboxContainer.innerHTML = `<p style="color: red;">Strata data is not loaded.</p>`; return; }
-    
     const namesFromCache = strataPlanCache[lot];
     if (namesFromCache) {
-        const rawNameString = namesFromCache[1] || namesFromCache[0] || '';
-        fetchedNames = parseOwnerNames(rawNameString); // Use new robust parser
-        
+        const mainContactName = namesFromCache[0] || '';
+        const fullNameOnTitle = namesFromCache[1] || '';
+        let finalNameString = mainContactName;
+        const hasTitles = /\b(Mr|Mrs|Ms|Miss)\b/i.test(mainContactName);
+        const firstWord = mainContactName.split(' ')[0] || '';
+        const firstNameIsInitial = /^[A-Z]\.?$/.test(firstWord);
+        if (!mainContactName || hasTitles || firstNameIsInitial) { finalNameString = fullNameOnTitle; }
+        const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(finalNameString);
+        let parsedNames = [];
+        if (isCompany) {
+            parsedNames = [finalNameString.replace(/\s*\(ref:\d+\)/gi, '').trim()];
+        } else {
+            parsedNames = finalNameString.split(/\s+and\s+|\s*&\s*|\s*,\s*/i)
+                .map(name => name.trim().replace(/\s*\(ref:\d+\)/gi, '').replace(/^Per\s/i, '')).filter(name => name);
+        }
+        fetchedNames = [...new Set(parsedNames)];
         checkboxContainer.innerHTML = '';
         if (fetchedNames.length > 0) {
             fetchedNames.forEach(name => {
                 const div = document.createElement('div');
                 div.className = 'checkbox-item';
                 div.innerHTML = `<label><input type="checkbox" name="attendee" value="${name}"> ${name}</label>`;
-                if (/\b(P\/L|Pty Ltd|Limited|Corp|Inc)\b/i.test(name)) { 
-                    companyRepGroup.style.display = 'block'; 
-                }
+                if (/\b(P\/L|Pty Ltd|Limited)\b/i.test(name)) { companyRepGroup.style.display = 'block'; }
                 checkboxContainer.appendChild(div);
             });
-        } else {
-             checkboxContainer.innerHTML = '<p style="color: red;">No valid names found for this Lot Number.</p>';
-        }
+        } else { checkboxContainer.innerHTML = '<p style="color: red;">No valid names found for this Lot Number.</p>';}
     } else {
         checkboxContainer.innerHTML = '<p style="color: red;">No names found for this Lot Number.</p>';
     }
 };
-
-/**
- * A more robust function to parse varied owner name strings.
- * @param {string} nameString - The raw string of owner names.
- * @returns {string[]} An array of parsed names.
- */
-function parseOwnerNames(nameString) {
-    if (!nameString) return [];
-
-    // Rule 1: Check for explicit company indicators first.
-    if (/\b(P\/L|Pty Ltd|Limited|Corp|Inc)\b/i.test(nameString)) {
-        // Return as a single entity, cleaning up references.
-        return [nameString.replace(/\s*\(ref:\d+\)/gi, '').trim()];
-    }
-
-    // Rule 2: Split by common delimiters, being careful of order.
-    let names = nameString
-        .split(/\s+and\s+|\s*&\s*|\s*,\s*/i) // Split by 'and', '&', or ','
-        .map(name => name
-            .replace(/\b(Mr|Mrs|Ms|Miss|Dr)\.?\s*/gi, '') // Remove titles
-            .replace(/\s*\(ref:\d+\)/gi, '') // Remove references
-            .replace(/^Per\s/i, '') // Remove "Per " prefix
-            .trim()
-        )
-        .filter(name => name && name.length > 1); // Filter out empty or single-initial names
-
-    return [...new Set(names)]; // Return unique names to avoid duplicates
-}
 
 const handleDeleteQueued = (submissionId) => {
     let queue = getSubmissionQueue();
@@ -318,12 +292,13 @@ const handleDelete = async (lotNumber) => {
         try {
             const result = await postToServer({ action: 'delete', lot: lotNumber, sp: sp });
             if (result.success) {
-                showToast(`Lot ${lotNumber} deleted successfully.`, 'success');
+                statusEl.textContent = `Lot ${lotNumber} deleted successfully.`;
                 checkAndLoadMeeting(sp);
             } else { throw new Error(result.error); }
         } catch (error) {
             console.error('Deletion Error:', error);
-            showToast(`Error deleting Lot ${lotNumber}: ${error.message}`, 'error');
+            statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
+            if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
 };
@@ -331,23 +306,28 @@ const handleDelete = async (lotNumber) => {
 const handleEmailPdf = async () => {
     const sp = strataPlanSelect.value;
     if (!sp) {
-        showToast('Please select a Strata Plan first.', 'error');
+        statusEl.textContent = 'Please select a Strata Plan first.';
+        statusEl.style.color = 'red';
         return;
     }
     const modalResponse = await showModal("Enter the email address to send the PDF report to:", { showInput: true, confirmText: 'Send Email' });
     if (modalResponse.confirmed && modalResponse.value) {
         const email = modalResponse.value;
-        if (!EMAIL_REGEX.test(email)) {
-            showToast('Invalid email address format.', 'error');
+        if (!/^\S+@\S+\.\S+$/.test(email)) {
+            statusEl.textContent = 'Invalid email address.';
+            statusEl.style.color = 'red';
             return;
         }
-
-        showToast('Sending request... The report will be emailed shortly.', 'info');
+        statusEl.textContent = 'Sending request... The PDF will be emailed shortly.';
+        statusEl.style.color = 'blue';
         emailPdfBtn.disabled = true;
 
         const body = { action: 'emailPdfReport', sp, email };
+        const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+        if (sessionUser) {
+            body.user = sessionUser;
+        }
         
-        // Fire-and-forget but with better user feedback
         fetch(APPS_SCRIPT_URL, {
             method: 'POST',
             mode: 'cors',
@@ -358,31 +338,22 @@ const handleEmailPdf = async () => {
         });
 
         setTimeout(() => {
+            statusEl.textContent = `Report generation started. Please check ${email} in a moment.`;
+            statusEl.style.color = 'green';
             emailPdfBtn.disabled = false;
-        }, 3000);
+        }, 1500);
     }
 };
 
 const handleClearCache = async () => {
-    const queue = getSubmissionQueue();
-    let warningText = "Are you sure you want to clear all cached data? This will remove any unsynced submissions.";
-    
-    if (queue.length > 0) {
-        const plural = queue.length === 1 ? 'submission' : 'submissions';
-        // Using innerHTML with <br> and <b> for a stronger warning
-        warningText = `You have <b>${queue.length} unsynced ${plural}</b>.<br><br>Clearing the cache will PERMANENTLY DELETE them. Are you sure?`;
-    }
-
-    const modalResponse = await showModal(warningText, { 
-        confirmText: 'Yes, Delete All Data', 
-        isHtml: true 
-    });
-
+    const modalResponse = await showModal(
+        "Are you sure you want to clear all cached data? This will remove any unsynced submissions.",
+        { confirmText: 'Yes, Clear Data', cancelText: 'Cancel' }
+    );
     if (modalResponse.confirmed) {
         localStorage.removeItem('submissionQueue');
         clearStrataCache(); 
         document.cookie = 'selectedSP=; Max-Age=0; path=/;';
-        showToast('All cached data has been cleared.', 'success');
         resetUiOnPlanChange();
         updateDisplay(strataPlanSelect.value);
     }
@@ -391,7 +362,8 @@ const handleClearCache = async () => {
 const handleChangeMeetingType = async () => {
     const sp = strataPlanSelect.value;
     if (!sp) {
-        showToast("Please select a strata plan first.", 'error');
+        statusEl.textContent = "Please select a strata plan first.";
+        statusEl.style.color = 'red';
         return;
     }
     const modalResponse = await showModal("Enter the new meeting type:", { showInput: true, confirmText: 'Change Type' });
@@ -400,13 +372,16 @@ const handleChangeMeetingType = async () => {
         try {
             const result = await postToServer({ action: 'changeMeetingType', sp, newMeetingType });
             if (result.success) {
-                showToast("Meeting type updated successfully.", 'success');
+                statusEl.textContent = "Meeting type updated successfully.";
+                statusEl.style.color = 'green';
                 await checkAndLoadMeeting(sp); // Refresh to show changes
             } else {
                 throw new Error(result.error);
             }
         } catch (error) {
-            showToast(`Error: ${error.message}`, 'error');
+            statusEl.textContent = `Error: ${error.message}`;
+            statusEl.style.color = 'red';
+            if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
 };
@@ -417,7 +392,8 @@ const handleFormSubmit = async (event) => {
     const sp = strataPlanSelect.value;
     const lot = lotInput.value.trim();
     if (!sp || !lot) {
-        showToast('Please select a plan and enter a lot number.', 'error');
+        statusEl.textContent = 'Please select a plan and enter a lot number.';
+        statusEl.style.color = 'red';
         return;
     }
     let selectedNames = Array.from(document.querySelectorAll('input[name="attendee"]:checked')).map(cb => cb.value);
@@ -426,14 +402,14 @@ const handleFormSubmit = async (event) => {
     const companyRep = companyRepInput.value.trim();
     const proxyHolderLot = proxyHolderLotInput.value.trim();
     if (isProxy) {
-        if (!proxyHolderLot) { showToast('Please enter the Proxy Holder Lot Number.', 'error'); return; }
+        if (!proxyHolderLot) { statusEl.textContent = 'Please enter the Proxy Holder Lot Number.'; statusEl.style.color = 'red'; return; }
         selectedNames = [];
     } else {
         if (selectedNames.length === 0 && fetchedNames.length > 0) {
             const isCompany = /\b(P\/L|Pty Ltd|Limited)\b/i.test(fetchedNames[0]);
             if (isCompany) selectedNames = [fetchedNames[0]];
         }
-        if (selectedNames.length === 0) { showToast('Please select at least one owner.', 'error'); return; }
+        if (selectedNames.length === 0) { statusEl.textContent = 'Please select at least one owner.'; statusEl.style.color = 'red'; return; }
     }
     const submission = {
         submissionId: `sub_${Date.now()}_${Math.random()}`,
@@ -444,7 +420,8 @@ const handleFormSubmit = async (event) => {
     saveSubmissionQueue(queue);
     updateDisplay(sp);
     updateSyncButton();
-    showToast(`Lot ${lot} queued for submission.`, 'info');
+    statusEl.textContent = `Lot ${lot} queued for submission.`;
+    statusEl.style.color = 'green';
     
     const selectedSP = strataPlanSelect.value;
     form.reset();
@@ -454,6 +431,7 @@ const handleFormSubmit = async (event) => {
     proxyHolderGroup.style.display = 'none';
     checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
     lotInput.focus();
+    setTimeout(() => { if (statusEl.textContent === `Lot ${lot} queued for submission.`) statusEl.textContent = ''; }, 3000);
 };
 
 proxyCheckbox.addEventListener('change', () => {
@@ -468,6 +446,7 @@ proxyCheckbox.addEventListener('change', () => {
 });
 
 // --- Initial Load ---
+// FIX: This logic correctly checks for a stored user session and initializes the app.
 document.addEventListener('DOMContentLoaded', () => {
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
@@ -493,12 +472,8 @@ document.addEventListener('DOMContentLoaded', () => {
         handlePlanSelection(e.target.value);
     });
 
-    const token = sessionStorage.getItem('attendanceAuthToken');
-    if (token) {
-        initializeApp(); // New flow: init if token exists
-    } else {
-        // Show login section if no token, hide the app
-        loginSection.classList.remove('hidden');
-        mainAppSection.classList.add('hidden');
+    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+    if (sessionUser) {
+        initializeApp(sessionUser);
     }
 });
