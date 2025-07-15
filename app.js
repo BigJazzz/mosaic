@@ -60,16 +60,22 @@ const initializeApp = (user) => {
         strataPlanWrapper.classList.add('hidden');
         populateStrataPlans().then(() => {
             strataPlanSelect.value = user.spAccess;
-            handlePlanSelection(user.spAccess);
+            handlePlanSelection(user.spAccess); // MODIFIED: Direct function call
         });
     } else {
-        populateStrataPlans();
+        populateStrataPlans().then(() => {
+            const initialSP = strataPlanSelect.value;
+            if (initialSP) {
+                handlePlanSelection(initialSP);
+            }
+        });
     }
 
     updateSyncButton();
     setInterval(syncSubmissions, 60000);
 };
 
+// NEW: Central function to handle all logic when a plan is selected.
 const handlePlanSelection = async (sp) => {
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
     resetUiOnPlanChange();
@@ -419,7 +425,6 @@ const handleFormSubmit = async (event) => {
     statusEl.textContent = `Lot ${lot} queued for submission.`;
     statusEl.style.color = 'green';
     
-    // MODIFIED: Save and restore strata plan value
     const selectedSP = strataPlanSelect.value;
     form.reset();
     strataPlanSelect.value = selectedSP;
