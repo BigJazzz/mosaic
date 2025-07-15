@@ -1,3 +1,5 @@
+// fileName: ui.js
+
 // --- UI & Rendering ---
 const updateDisplay = (sp) => {
     if (!sp) return;
