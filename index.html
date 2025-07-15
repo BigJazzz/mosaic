@@ -50,7 +50,6 @@
 <body>
 
     <div class="container">
-        <!-- Login Section -->
         <div id="login-section">
             <h1>Login</h1>
             <form id="login-form">
@@ -67,7 +66,6 @@
             </form>
         </div>
 
-        <!-- Main App Section (Initially Hidden) -->
         <div id="main-app" class="hidden">
             <div class="header-container">
                 <h1>Attendance Form</h1>
@@ -100,7 +98,7 @@
                     <input type="text" id="proxy-holder-lot" placeholder="Enter lot number or name holding the proxy">
                 </div>
                 <div class="form-group">
-                    <label class="checkbox-item"><input type="checkbox" id="is-financial"> Is Financial?</label>
+                    <label class="checkbox-item" id="financial-label"><input type="checkbox" id="is-financial"> Is Financial?</label>
                     <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is a Proxy form?</label>
                 </div>
                 <button type="submit" id="submit-button">Submit</button>
@@ -123,13 +121,11 @@
                  <button type="button" id="email-pdf-btn">Email PDF Report</button>
             </div>
 
-            <!-- User Management Section -->
             <div class="user-management-section">
                 <h2>User Management</h2>
                 <p>Logged in as: <b id="user-display"></b></p>
                 <button type="button" id="change-password-btn">Change My Password</button>
 
-                <!-- Admin Panel (Initially Hidden) -->
                 <div id="admin-panel" class="hidden">
                     <hr style="margin: 2rem 0;">
                     <h3>Admin Panel</h3>
