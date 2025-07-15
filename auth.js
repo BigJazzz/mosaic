@@ -15,28 +15,24 @@ const handleLogin = async (event) => {
     loginStatus.textContent = 'Logging in...';
     loginStatus.style.color = 'blue';
     
-    // NEW: Log the username being sent for verification.
     console.log('Attempting login for username:', username);
 
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
         
-        // NEW: Log the raw response received from the server.
         console.log('Received response from server:', result);
 
         if (result.success && result.token) {
-            // NEW: Log on successful token receipt.
             console.log('Login successful, token received. Initializing app.');
             loginStatus.textContent = '';
             sessionStorage.setItem('attendanceAuthToken', result.token);
             initializeApp();
         } else {
-            // NEW: Log the reason for the failed login condition.
-            console.error('Login condition not met. Server response:', result);
+            // FIX: Stringify the result object to see its contents instead of "[object Object]".
+            console.error('Login condition not met. Server response:', JSON.stringify(result, null, 2));
             throw new Error(result.error || 'Server indicated failure but did not provide a specific error message.');
         }
     } catch (error) {
-        // NEW: Log the full error object to the console for debugging.
         console.error('Login process failed. Full error:', error);
 
         loginStatus.textContent = 'Login failed: Invalid username or password.';
