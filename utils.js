@@ -17,9 +17,7 @@ const postToServer = async (body) => {
     }
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
-    if (!jsonResponse.success && jsonResponse.error && jsonResponse.error.includes("Authentication failed")) {
-        handleLogout();
-    }
+    // The check for auth failure is now handled by the function that calls postToServer.
     return jsonResponse;
 };
 

@@ -109,6 +109,7 @@ const syncSubmissions = async () => {
         console.error('[CLIENT] Sync failed! Error:', error);
         statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     } finally {
         isSyncing = false;
         await checkAndLoadMeeting(strataPlanSelect.value); 
@@ -116,11 +117,46 @@ const syncSubmissions = async () => {
     }
 };
 
+const cacheAllNames = async (sp) => {
+    if (!sp) return;
+    const cacheKey = `strata_${sp}`;
+    strataPlanCache = null;
+    lotInput.disabled = true;
+    checkboxContainer.innerHTML = '<p>Loading strata data...</p>';
+
+    const cachedItem = localStorage.getItem(cacheKey);
+    if (cachedItem) {
+        const { timestamp, names } = JSON.parse(cachedItem);
+        const isCacheValid = (new Date().getTime() - timestamp) < CACHE_DURATION_MS;
+        if (isCacheValid) {
+            console.log(`[CLIENT] Using cached names for SP ${sp}.`);
+            strataPlanCache = names;
+            return;
+        } else {
+            console.log(`[CLIENT] Cache for SP ${sp} is expired. Refetching.`);
+            localStorage.removeItem(cacheKey);
+        }
+    }
+
+    try {
+        console.log(`[CLIENT] Fetching all names for SP ${sp} from server.`);
+        const data = await postToServer({ action: 'getAllNamesForPlan', sp: sp });
+        if (data.success) {
+            const newCacheItem = { timestamp: new Date().getTime(), names: data.names };
+            strataPlanCache = data.names;
+            localStorage.setItem(cacheKey, JSON.stringify(newCacheItem));
+        } else { throw new Error(data.error); }
+    } catch (error) {
+       console.error(`[CLIENT] Could not load data for SP ${sp}. Error:`, error);
+       checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
+       if (error.message.includes("Authentication failed")) handleLogout();
+    }
+};
 
 const populateStrataPlans = async () => {
     try {
         const data = await postToServer({ action: 'getStrataPlans' });
-        if (data.success && data.plans) {
+        if (data.success) {
             renderStrataPlans(data.plans);
             strataPlanSelect.disabled = false;
         } else {
@@ -129,6 +165,7 @@ const populateStrataPlans = async () => {
     } catch (error) {
         console.error("[CLIENT] Could not fetch strata plans:", error);
         strataPlanSelect.innerHTML = '<option value="">Could not load plans</option>';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -179,6 +216,7 @@ const checkAndLoadMeeting = async (sp) => {
         updateDisplay(sp);
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -245,6 +283,7 @@ const handleDelete = async (lotNumber) => {
         } catch (error) {
             console.error('Deletion Error:', error);
             statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
+            if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
 };
@@ -320,13 +359,14 @@ const handleChangeMeetingType = async () => {
             if (result.success) {
                 statusEl.textContent = "Meeting type updated successfully.";
                 statusEl.style.color = 'green';
-                await checkAndLoadMeeting(sp); // Refresh to show changes
+                await checkAndLoadMeeting(sp);
             } else {
                 throw new Error(result.error);
             }
         } catch (error) {
             statusEl.textContent = `Error: ${error.message}`;
             statusEl.style.color = 'red';
+            if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
 };

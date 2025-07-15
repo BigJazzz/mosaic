@@ -41,25 +41,26 @@ const loadUsers = async () => {
         if (!sessionUser) return;
 
         const result = await postToServer({ action: 'getUsers' });
-        if (result.success) {
-            const userListBody = document.getElementById('user-list-body');
-            userListBody.innerHTML = '';
-            result.users.forEach(user => {
-                const tr = document.createElement('tr');
-                const isCurrentUser = user.username === sessionUser.username;
-                const removeButtonHtml = isCurrentUser ? '' : `<button class="delete-btn" data-username="${user.username}">Remove</button>`;
-                
-                tr.innerHTML = `
-                    <td>${user.username}</td>
-                    <td>${user.role}</td>
-                    <td>${user.spAccess || 'All'}</td>
-                    <td>${removeButtonHtml}</td>
-                `;
-                userListBody.appendChild(tr);
-            });
-        }
+        if (!result.success) throw new Error(result.error);
+        
+        const userListBody = document.getElementById('user-list-body');
+        userListBody.innerHTML = '';
+        result.users.forEach(user => {
+            const tr = document.createElement('tr');
+            const isCurrentUser = user.username === sessionUser.username;
+            const removeButtonHtml = isCurrentUser ? '' : `<button class="delete-btn" data-username="${user.username}">Remove</button>`;
+            
+            tr.innerHTML = `
+                <td>${user.username}</td>
+                <td>${user.role}</td>
+                <td>${user.spAccess || 'All'}</td>
+                <td>${removeButtonHtml}</td>
+            `;
+            userListBody.appendChild(tr);
+        });
     } catch (error) {
         console.error('Failed to load users:', error);
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -101,6 +102,7 @@ const handleAddUser = async () => {
     } catch (error) {
         document.getElementById('status').textContent = `Failed to add user: ${error.message}`;
         document.getElementById('status').style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -123,6 +125,7 @@ const handleRemoveUser = async (e) => {
     } catch (error) {
         document.getElementById('status').textContent = `Failed to remove user: ${error.message}`;
         document.getElementById('status').style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -142,5 +145,6 @@ const handleChangePassword = async () => {
     } catch (error) {
         document.getElementById('status').textContent = `Failed to change password: ${error.message}`;
         document.getElementById('status').style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
