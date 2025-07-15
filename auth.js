@@ -3,7 +3,6 @@
 // --- Authentication & Session Logic (Auth Revamp) ---
 const handleLogin = async (event) => {
     event.preventDefault();
-    // FIX: Convert username to lowercase to handle mixed-case entries.
     const username = document.getElementById('username').value.trim().toLowerCase();
     const password = document.getElementById('password').value;
     const loginStatus = document.getElementById('login-status');
@@ -15,29 +14,37 @@ const handleLogin = async (event) => {
     }
     loginStatus.textContent = 'Logging in...';
     loginStatus.style.color = 'blue';
+    
+    // NEW: Log the username being sent for verification.
+    console.log('Attempting login for username:', username);
 
     try {
-        // The backend must be updated to return a { success: true, token: '...' } object on successful login.
         const result = await postToServer({ action: 'loginUser', username, password });
         
+        // NEW: Log the raw response received from the server.
+        console.log('Received response from server:', result);
+
         if (result.success && result.token) {
+            // NEW: Log on successful token receipt.
+            console.log('Login successful, token received. Initializing app.');
             loginStatus.textContent = '';
-            // Store ONLY the secure token. User details will be fetched on app initialization.
             sessionStorage.setItem('attendanceAuthToken', result.token);
-            // Trigger the app initialization, which now fetches user details securely.
             initializeApp();
         } else {
-            throw new Error(result.error || 'Invalid username or password.');
+            // NEW: Log the reason for the failed login condition.
+            console.error('Login condition not met. Server response:', result);
+            throw new Error(result.error || 'Server indicated failure but did not provide a specific error message.');
         }
     } catch (error) {
-        // FIX: Make the login error message more generic for security.
+        // NEW: Log the full error object to the console for debugging.
+        console.error('Login process failed. Full error:', error);
+
         loginStatus.textContent = 'Login failed: Invalid username or password.';
         loginStatus.style.color = 'red';
     }
 };
 
 const handleLogout = () => {
-    // Clear the token and any stored user data, then reload to the login screen.
     sessionStorage.removeItem('attendanceAuthToken');
     sessionStorage.removeItem('attendanceUser'); 
     location.reload();
@@ -49,7 +56,6 @@ const loadUsers = async () => {
         const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
         if (!sessionUser) return;
 
-        // The backend will validate the token sent by postToServer to authorize this action.
         const result = await postToServer({ action: 'getUsers' });
         if (!result.success) throw new Error(result.error);
         
@@ -94,7 +100,6 @@ const handleAddUser = async () => {
     }
 
     try {
-        // The backend must validate the token before adding a user.
         const result = await postToServer({ 
             action: 'addUser', 
             username: usernameRes.value, 
@@ -122,7 +127,6 @@ const handleRemoveUser = async (e) => {
     if (!confirmRes.confirmed) return;
 
     try {
-        // The backend must validate the token before removing a user.
         const result = await postToServer({ action: 'removeUser', username });
         if (result.success) {
             showToast('User removed successfully.', 'success');
