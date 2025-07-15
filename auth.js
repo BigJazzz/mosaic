@@ -1,6 +1,5 @@
 // fileName: auth.js
 
-// --- Authentication & Session Logic (Auth Revamp) ---
 const handleLogin = async (event) => {
     event.preventDefault();
     const username = document.getElementById('username').value.trim().toLowerCase();
@@ -14,39 +13,86 @@ const handleLogin = async (event) => {
     }
     loginStatus.textContent = 'Logging in...';
     loginStatus.style.color = 'blue';
-    
-    console.log('Attempting login for username:', username);
 
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
         
-        console.log('Received response from server:', result);
-
-        if (result.success && result.token) {
-            console.log('Login successful, token received. Initializing app.');
+        // This relies on the server returning the user object on success
+        if (result.success && result.username) {
             loginStatus.textContent = '';
-            sessionStorage.setItem('attendanceAuthToken', result.token);
-            initializeApp();
+            const user = { username: result.username, role: result.role, spAccess: result.spAccess };
+            sessionStorage.setItem('attendanceUser', JSON.stringify(user));
+            initializeApp(user); 
         } else {
-            // FIX: Stringify the result object to see its contents instead of "[object Object]".
-            console.error('Login condition not met. Server response:', JSON.stringify(result, null, 2));
-            throw new Error(result.error || 'Server indicated failure but did not provide a specific error message.');
+            throw new Error(result.error || 'Invalid username or password.');
         }
     } catch (error) {
-        console.error('Login process failed. Full error:', error);
-
-        loginStatus.textContent = 'Login failed: Invalid username or password.';
+        loginStatus.textContent = `Login failed: Invalid username or password.`;
         loginStatus.style.color = 'red';
     }
 };
 
 const handleLogout = () => {
-    sessionStorage.removeItem('attendanceAuthToken');
-    sessionStorage.removeItem('attendanceUser'); 
+    sessionStorage.removeItem('attendanceUser');
     location.reload();
 };
 
-// --- User Management (Admin) ---
+// NEW: A helper function to generate a secure, random token.
+const generateToken = () => {
+    const randomValues = new Uint32Array(32);
+    window.crypto.getRandomValues(randomValues);
+    return Array.from(randomValues, val => val.toString(36)).join('');
+};
+
+const handleAddUser = async () => {
+    const usernameRes = await showModal("Enter new user's username:", { showInput: true, confirmText: 'Next' });
+    if (!usernameRes.confirmed || !usernameRes.value) return;
+    
+    const passwordRes = await showModal("Enter new user's password:", { showInput: true, inputType: 'password', confirmText: 'Next' });
+    if (!passwordRes.confirmed || !passwordRes.value) return;
+
+    const roleRes = await showModal("Enter role (Admin or User):", { showInput: true, confirmText: 'Next' });
+    if (!roleRes.confirmed || !roleRes.value) return;
+    
+    const spAccessRes = await showModal("Enter SP Access number (or leave blank for all):", { showInput: true, confirmText: 'Add User' });
+    if (!spAccessRes.confirmed) return;
+
+    const role = roleRes.value.trim();
+    if (role !== 'Admin' && role !== 'User') {
+        document.getElementById('status').textContent = 'Invalid role. Must be "Admin" or "User".';
+        document.getElementById('status').style.color = 'red';
+        return;
+    }
+
+    // NEW: Generate the token automatically.
+    const token = generateToken();
+    console.log(`Generated Token for new user "${usernameRes.value}": ${token}`);
+
+    try {
+        // NEW: Send the generated token with the new user's data.
+        const result = await postToServer({ 
+            action: 'addUser', 
+            username: usernameRes.value, 
+            password: passwordRes.value, 
+            role,
+            spAccess: spAccessRes.value,
+            token: token 
+        });
+
+        if (result.success) {
+            document.getElementById('status').textContent = 'User added successfully.';
+            document.getElementById('status').style.color = 'green';
+            loadUsers();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        document.getElementById('status').textContent = `Failed to add user: ${error.message}`;
+        document.getElementById('status').style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
+    }
+};
+
 const loadUsers = async () => {
     try {
         const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
@@ -72,46 +118,7 @@ const loadUsers = async () => {
         });
     } catch (error) {
         console.error('Failed to load users:', error);
-        showToast(`Error loading users: ${error.message}`, 'error');
-    }
-};
-
-const handleAddUser = async () => {
-    const usernameRes = await showModal("Enter new user's username:", { showInput: true, confirmText: 'Next' });
-    if (!usernameRes.confirmed || !usernameRes.value) return;
-    
-    const passwordRes = await showModal("Enter new user's password:", { showInput: true, inputType: 'password', confirmText: 'Next' });
-    if (!passwordRes.confirmed || !passwordRes.value) return;
-
-    const roleRes = await showModal("Enter role (Admin or User):", { showInput: true, confirmText: 'Next' });
-    if (!roleRes.confirmed || !roleRes.value) return;
-    
-    const spAccessRes = await showModal("Enter SP Access number (or leave blank for all):", { showInput: true, confirmText: 'Add User' });
-    if (!spAccessRes.confirmed) return;
-
-    const role = roleRes.value.trim();
-    if (role !== 'Admin' && role !== 'User') {
-        showToast('Invalid role. Must be "Admin" or "User".', 'error');
-        return;
-    }
-
-    try {
-        const result = await postToServer({ 
-            action: 'addUser', 
-            username: usernameRes.value, 
-            password: passwordRes.value, 
-            role,
-            spAccess: spAccessRes.value 
-        });
-
-        if (result.success) {
-            showToast('User added successfully.', 'success');
-            loadUsers();
-        } else {
-            throw new Error(result.error);
-        }
-    } catch (error) {
-        showToast(`Failed to add user: ${error.message}`, 'error');
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -125,17 +132,19 @@ const handleRemoveUser = async (e) => {
     try {
         const result = await postToServer({ action: 'removeUser', username });
         if (result.success) {
-            showToast('User removed successfully.', 'success');
+            document.getElementById('status').textContent = 'User removed successfully.';
+            document.getElementById('status').style.color = 'green';
             loadUsers();
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        showToast(`Failed to remove user: ${error.message}`, 'error');
+        document.getElementById('status').textContent = `Failed to remove user: ${error.message}`;
+        document.getElementById('status').style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
-// --- User Management (Self) ---
 const handleChangePassword = async () => {
     const passwordRes = await showModal("Enter your new password:", { showInput: true, inputType: 'password', confirmText: 'Change Password' });
     if (!passwordRes.confirmed || !passwordRes.value) return;
@@ -143,11 +152,14 @@ const handleChangePassword = async () => {
     try {
         const result = await postToServer({ action: 'changePassword', newPassword: passwordRes.value });
         if (result.success) {
-            showToast('Password changed successfully.', 'success');
+            document.getElementById('status').textContent = 'Password changed successfully.';
+            document.getElementById('status').style.color = 'green';
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        showToast(`Failed to change password: ${error.message}`, 'error');
+        document.getElementById('status').textContent = `Failed to change password: ${error.message}`;
+        document.getElementById('status').style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
