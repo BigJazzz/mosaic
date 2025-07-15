@@ -3,7 +3,8 @@
 // --- Authentication & Session Logic (Auth Revamp) ---
 const handleLogin = async (event) => {
     event.preventDefault();
-    const username = document.getElementById('username').value.trim();
+    // FIX: Convert username to lowercase to handle mixed-case entries.
+    const username = document.getElementById('username').value.trim().toLowerCase();
     const password = document.getElementById('password').value;
     const loginStatus = document.getElementById('login-status');
     
@@ -29,7 +30,8 @@ const handleLogin = async (event) => {
             throw new Error(result.error || 'Invalid username or password.');
         }
     } catch (error) {
-        loginStatus.textContent = `Login failed: ${error.message}`;
+        // FIX: Make the login error message more generic for security.
+        loginStatus.textContent = 'Login failed: Invalid username or password.';
         loginStatus.style.color = 'red';
     }
 };
