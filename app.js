@@ -43,6 +43,8 @@ let currentTotalLots = 0;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
+// --- Core App Logic ---
+
 const initializeApp = (user) => {
     loginSection.classList.add('hidden');
     mainAppSection.classList.remove('hidden');
@@ -58,7 +60,7 @@ const initializeApp = (user) => {
         strataPlanWrapper.classList.add('hidden');
         populateStrataPlans().then(() => {
             strataPlanSelect.value = user.spAccess;
-            strataPlanSelect.dispatchEvent(new Event('change'));
+            handlePlanSelection(user.spAccess);
         });
     } else {
         populateStrataPlans();
@@ -66,6 +68,15 @@ const initializeApp = (user) => {
 
     updateSyncButton();
     setInterval(syncSubmissions, 60000);
+};
+
+const handlePlanSelection = async (sp) => {
+    document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
+    resetUiOnPlanChange();
+    if (sp) {
+        await cacheAllNames(sp);
+        await checkAndLoadMeeting(sp);
+    }
 };
 
 // --- Submission Syncing ---
@@ -447,14 +458,9 @@ document.addEventListener('DOMContentLoaded', () => {
     clearCacheBtn.addEventListener('click', handleClearCache);
     lotInput.addEventListener('blur', fetchNames);
     form.addEventListener('submit', handleFormSubmit);
-    strataPlanSelect.addEventListener('change', async (e) => {
-        const sp = e.target.value;
-        document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
-        resetUiOnPlanChange();
-        if (sp) {
-            await cacheAllNames(sp);
-            await checkAndLoadMeeting(sp);
-        }
+    
+    strataPlanSelect.addEventListener('change', (e) => {
+        handlePlanSelection(e.target.value);
     });
 
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
