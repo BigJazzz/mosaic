@@ -1,4 +1,6 @@
-// --- Authentication & Session Logic ---
+// fileName: auth.js
+
+// --- Authentication & Session Logic (Auth Revamp) ---
 const handleLogin = async (event) => {
     event.preventDefault();
     const username = document.getElementById('username').value.trim();
@@ -14,12 +16,15 @@ const handleLogin = async (event) => {
     loginStatus.style.color = 'blue';
 
     try {
+        // The backend must be updated to return a { success: true, token: '...' } object on successful login.
         const result = await postToServer({ action: 'loginUser', username, password });
-        if (result.success) {
+        
+        if (result.success && result.token) {
             loginStatus.textContent = '';
-            const user = { username: result.username, role: result.role, spAccess: result.spAccess };
-            sessionStorage.setItem('attendanceUser', JSON.stringify(user));
-            initializeApp(user);
+            // Store ONLY the secure token. User details will be fetched on app initialization.
+            sessionStorage.setItem('attendanceAuthToken', result.token);
+            // Trigger the app initialization, which now fetches user details securely.
+            initializeApp();
         } else {
             throw new Error(result.error || 'Invalid username or password.');
         }
@@ -30,7 +35,9 @@ const handleLogin = async (event) => {
 };
 
 const handleLogout = () => {
-    sessionStorage.removeItem('attendanceUser');
+    // Clear the token and any stored user data, then reload to the login screen.
+    sessionStorage.removeItem('attendanceAuthToken');
+    sessionStorage.removeItem('attendanceUser'); 
     location.reload();
 };
 
@@ -40,6 +47,7 @@ const loadUsers = async () => {
         const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
         if (!sessionUser) return;
 
+        // The backend will validate the token sent by postToServer to authorize this action.
         const result = await postToServer({ action: 'getUsers' });
         if (!result.success) throw new Error(result.error);
         
@@ -60,7 +68,7 @@ const loadUsers = async () => {
         });
     } catch (error) {
         console.error('Failed to load users:', error);
-        if (error.message.includes("Authentication failed")) handleLogout();
+        showToast(`Error loading users: ${error.message}`, 'error');
     }
 };
 
@@ -79,12 +87,12 @@ const handleAddUser = async () => {
 
     const role = roleRes.value.trim();
     if (role !== 'Admin' && role !== 'User') {
-        document.getElementById('status').textContent = 'Invalid role. Must be "Admin" or "User".';
-        document.getElementById('status').style.color = 'red';
+        showToast('Invalid role. Must be "Admin" or "User".', 'error');
         return;
     }
 
     try {
+        // The backend must validate the token before adding a user.
         const result = await postToServer({ 
             action: 'addUser', 
             username: usernameRes.value, 
@@ -92,17 +100,15 @@ const handleAddUser = async () => {
             role,
             spAccess: spAccessRes.value 
         });
+
         if (result.success) {
-            document.getElementById('status').textContent = 'User added successfully.';
-            document.getElementById('status').style.color = 'green';
+            showToast('User added successfully.', 'success');
             loadUsers();
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        document.getElementById('status').textContent = `Failed to add user: ${error.message}`;
-        document.getElementById('status').style.color = 'red';
-        if (error.message.includes("Authentication failed")) handleLogout();
+        showToast(`Failed to add user: ${error.message}`, 'error');
     }
 };
 
@@ -114,18 +120,16 @@ const handleRemoveUser = async (e) => {
     if (!confirmRes.confirmed) return;
 
     try {
+        // The backend must validate the token before removing a user.
         const result = await postToServer({ action: 'removeUser', username });
         if (result.success) {
-            document.getElementById('status').textContent = 'User removed successfully.';
-            document.getElementById('status').style.color = 'green';
+            showToast('User removed successfully.', 'success');
             loadUsers();
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        document.getElementById('status').textContent = `Failed to remove user: ${error.message}`;
-        document.getElementById('status').style.color = 'red';
-        if (error.message.includes("Authentication failed")) handleLogout();
+        showToast(`Failed to remove user: ${error.message}`, 'error');
     }
 };
 
@@ -137,14 +141,11 @@ const handleChangePassword = async () => {
     try {
         const result = await postToServer({ action: 'changePassword', newPassword: passwordRes.value });
         if (result.success) {
-            document.getElementById('status').textContent = 'Password changed successfully.';
-            document.getElementById('status').style.color = 'green';
+            showToast('Password changed successfully.', 'success');
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        document.getElementById('status').textContent = `Failed to change password: ${error.message}`;
-        document.getElementById('status').style.color = 'red';
-        if (error.message.includes("Authentication failed")) handleLogout();
+        showToast(`Failed to change password: ${error.message}`, 'error');
     }
 };
