@@ -43,8 +43,6 @@ let currentTotalLots = 0;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
-// --- Core App Logic ---
-
 const initializeApp = (user) => {
     loginSection.classList.add('hidden');
     mainAppSection.classList.remove('hidden');
@@ -60,22 +58,18 @@ const initializeApp = (user) => {
         strataPlanWrapper.classList.add('hidden');
         populateStrataPlans().then(() => {
             strataPlanSelect.value = user.spAccess;
-            handlePlanSelection(user.spAccess); // MODIFIED: Direct function call
+            handlePlanSelection(user.spAccess);
         });
     } else {
-        populateStrataPlans().then(() => {
-            const initialSP = strataPlanSelect.value;
-            if (initialSP) {
-                handlePlanSelection(initialSP);
-            }
-        });
+        populateStrataPlans();
     }
 
     updateSyncButton();
     setInterval(syncSubmissions, 60000);
 };
 
-// NEW: Central function to handle all logic when a plan is selected.
+// --- Core App Logic ---
+
 const handlePlanSelection = async (sp) => {
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
     resetUiOnPlanChange();
@@ -85,7 +79,6 @@ const handlePlanSelection = async (sp) => {
     }
 };
 
-// --- Submission Syncing ---
 const updateSyncButton = () => {
     const queue = getSubmissionQueue();
     if (queue.length > 0) {
@@ -376,7 +369,7 @@ const handleChangeMeetingType = async () => {
             if (result.success) {
                 statusEl.textContent = "Meeting type updated successfully.";
                 statusEl.style.color = 'green';
-                await checkAndLoadMeeting(sp);
+                await checkAndLoadMeeting(sp); // Refresh to show changes
             } else {
                 throw new Error(result.error);
             }
