@@ -472,8 +472,17 @@ document.addEventListener('DOMContentLoaded', () => {
         handlePlanSelection(e.target.value);
     });
 
-    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
-    if (sessionUser) {
-        initializeApp(sessionUser);
-    }
+    //const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+    //if (sessionUser) {
+    //    initializeApp(sessionUser);
+    //}
+document.addEventListener('DOMContentLoaded', () => {
+    // ... (keep the other event listeners above this section)
+
+
+    // --- ADD THIS BLOCK ---
+    // Create a dummy user with Admin privileges to bypass login
+    const tempUser = { username: 'Temp Admin', role: 'Admin', spAccess: null };
+    // Initialize the app directly
+    initializeApp(tempUser);
 });
