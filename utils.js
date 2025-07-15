@@ -45,7 +45,6 @@ const showModal = (text, { showInput = false, inputType = 'text', confirmText = 
     return new Promise(resolve => { 
         modalResolve = resolve; 
         
-        // These listeners are redefined here to ensure they only resolve the current promise
         modalConfirmBtn.onclick = () => {
             modal.style.display = 'none';
             if (modalResolve) modalResolve({ confirmed: true, value: modalInputEl.value });

@@ -11,6 +11,9 @@ const changePasswordBtn = document.getElementById('change-password-btn');
 const logoutBtn = document.getElementById('logout-btn');
 const strataPlanWrapper = document.getElementById('strata-plan-wrapper');
 const userListBody = document.getElementById('user-list-body');
+const meetingTitle = document.getElementById('meeting-title');
+const meetingDate = document.getElementById('meeting-date');
+const changeMeetingTypeBtn = document.getElementById('change-meeting-type-btn');
 
 const lotInput = document.getElementById('lot-number');
 const checkboxContainer = document.getElementById('checkbox-container');
@@ -47,6 +50,7 @@ const initializeApp = (user) => {
 
     if (user.role === 'Admin') {
         adminPanel.classList.remove('hidden');
+        changeMeetingTypeBtn.classList.remove('hidden');
         loadUsers();
     }
     
@@ -151,6 +155,11 @@ const checkAndLoadMeeting = async (sp) => {
             currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
             currentTotalLots = initialData.totalLots;
             updateDisplay(sp);
+
+            if (initialData.meetingType) {
+                meetingTitle.textContent = `Attendance Form - ${initialData.meetingType}`;
+                meetingDate.textContent = new Date().toLocaleDateString("en-AU", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            }
 
             if (initialData.meetingType && initialData.meetingType.toUpperCase() === 'SCM') {
                 financialLabel.lastChild.nodeValue = " Is Committee Member?";
@@ -296,6 +305,32 @@ const handleClearCache = async () => {
     }
 };
 
+const handleChangeMeetingType = async () => {
+    const sp = strataPlanSelect.value;
+    if (!sp) {
+        statusEl.textContent = "Please select a strata plan first.";
+        statusEl.style.color = 'red';
+        return;
+    }
+    const modalResponse = await showModal("Enter the new meeting type:", { showInput: true, confirmText: 'Change Type' });
+    if (modalResponse.confirmed && modalResponse.value) {
+        const newMeetingType = modalResponse.value;
+        try {
+            const result = await postToServer({ action: 'changeMeetingType', sp, newMeetingType });
+            if (result.success) {
+                statusEl.textContent = "Meeting type updated successfully.";
+                statusEl.style.color = 'green';
+                await checkAndLoadMeeting(sp); // Refresh to show changes
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            statusEl.textContent = `Error: ${error.message}`;
+            statusEl.style.color = 'red';
+        }
+    }
+};
+
 // --- Event Handlers ---
 const handleFormSubmit = async (event) => {
     event.preventDefault();
@@ -358,6 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
     addUserBtn.addEventListener('click', handleAddUser);
     userListBody.addEventListener('click', handleRemoveUser);
     changePasswordBtn.addEventListener('click', handleChangePassword);
+    changeMeetingTypeBtn.addEventListener('click', handleChangeMeetingType);
     
     attendeeTableBody.addEventListener('click', (e) => {
         if (e.target.matches('.delete-btn[data-submission-id]')) {

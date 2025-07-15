@@ -20,6 +20,8 @@ const resetUiOnPlanChange = () => {
     document.getElementById('lot-number').value = '';
     document.getElementById('lot-number').disabled = true;
     document.getElementById('financial-label').lastChild.nodeValue = " Is Financial?";
+    document.getElementById('meeting-title').textContent = 'Attendance Form';
+    document.getElementById('meeting-date').textContent = '';
 };
 
 const renderStrataPlans = (plans) => {
