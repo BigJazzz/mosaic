@@ -64,6 +64,55 @@ const initializeApp = (user) => {
     setInterval(syncSubmissions, 60000);
 };
 
+// --- Submission Syncing ---
+const updateSyncButton = () => {
+    const queue = getSubmissionQueue();
+    if (queue.length > 0) {
+        syncBtn.disabled = isSyncing;
+        const plural = queue.length === 1 ? '' : 's';
+        syncBtn.textContent = `Sync ${queue.length} Submission${plural}`;
+    } else {
+        syncBtn.disabled = true;
+        syncBtn.textContent = 'Submissions Synced';
+    }
+};
+
+const syncSubmissions = async () => {
+    if (isSyncing || !navigator.onLine) return;
+    const queue = getSubmissionQueue();
+    if (queue.length === 0) return;
+    
+    isSyncing = true;
+    statusEl.textContent = `Syncing ${queue.length} items...`;
+    statusEl.style.color = 'blue';
+    updateSyncButton();
+    document.querySelectorAll('.delete-btn[data-submission-id]').forEach(btn => btn.disabled = true);
+
+    const batchToSend = [...queue];
+    try {
+        const result = await postToServer({ action: 'batchSubmit', submissions: batchToSend });
+        if (result.success) {
+            const currentQueue = getSubmissionQueue();
+            const sentIds = new Set(batchToSend.map(item => item.submissionId));
+            const newQueue = currentQueue.filter(item => !sentIds.has(item.submissionId));
+            saveSubmissionQueue(newQueue);
+            statusEl.textContent = `Successfully synced ${batchToSend.length} items.`;
+            statusEl.style.color = 'green';
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        console.error('[CLIENT] Sync failed! Error:', error);
+        statusEl.textContent = `Sync failed. Items remain queued.`;
+        statusEl.style.color = 'red';
+    } finally {
+        isSyncing = false;
+        await checkAndLoadMeeting(strataPlanSelect.value); 
+        updateSyncButton();
+    }
+};
+
+
 const populateStrataPlans = async () => {
     try {
         const data = await postToServer({ action: 'getStrataPlans' });
