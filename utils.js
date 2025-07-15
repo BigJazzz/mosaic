@@ -1,25 +1,45 @@
-// --- Helper for making POST requests ---
+// fileName: utils.js
+
+// This import assumes you are using a module-aware environment.
+// Ensure your main script tag in index.html has type="module".
+import { APPS_SCRIPT_URL } from './config.js';
+
+// --- Helper for making POST requests (Auth Revamp) ---
 const postToServer = async (body) => {
-    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
-    if (sessionUser) {
-        body.user = sessionUser;
+    // Token is now retrieved and sent in the header, not the body.
+    const token = sessionStorage.getItem('attendanceAuthToken');
+    const headers = { 'Content-Type': 'text/plain' };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
+
     console.log('[CLIENT] Making POST request to server with body:', body);
     const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'cors',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: headers,
         body: JSON.stringify(body)
     });
+
+    // Centralized check for authentication failure.
+    if (response.status === 401 || response.status === 403) {
+        console.error('[CLIENT] Authentication failed. Logging out.');
+        // This function is defined in auth.js but should be available globally.
+        handleLogout(); 
+        throw new Error('Authentication failed. Please log in again.');
+    }
+    
     if (!response.ok) {
         console.error('[CLIENT] Network response was not ok.', response);
-        throw new Error(`Network response was not ok: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Network Error: ${response.statusText} - ${errorText}`);
     }
+
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
-    // The check for auth failure is now handled by the function that calls postToServer.
     return jsonResponse;
 };
+
 
 // --- Modal Logic ---
 let modalResolve = null;
@@ -58,6 +78,26 @@ const showModal = (text, { showInput = false, inputType = 'text', confirmText = 
             }
         };
     });
+};
+
+
+// --- Notification "Toast" System ---
+const showToast = (message, type = 'info', duration = 4000) => {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    container.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    // Animate out and remove
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, duration);
 };
 
 
