@@ -1,7 +1,4 @@
-// fileName: utils.js
-
-// This import assumes you are using a module-aware environment.
-// Ensure your main script tag in index.html has type="module".
+// This import requires this file to be loaded as type="module" in index.html
 import { APPS_SCRIPT_URL } from './config.js';
 
 // --- Helper for making POST requests (Auth Revamp) ---
@@ -111,3 +108,12 @@ const clearStrataCache = () => {
         }
     });
 };
+
+// --- FIX: Expose necessary functions to the global scope ---
+// This allows classic scripts like auth.js to see functions from this module.
+window.postToServer = postToServer;
+window.showModal = showModal;
+window.showToast = showToast;
+window.getSubmissionQueue = getSubmissionQueue;
+window.saveSubmissionQueue = saveSubmissionQueue;
+window.clearStrataCache = clearStrataCache;
