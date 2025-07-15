@@ -17,7 +17,7 @@ const handleLogin = async (event) => {
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
         
-        // This relies on the server returning the user object on success
+        // This is the correct condition based on your server's response
         if (result.success && result.username) {
             loginStatus.textContent = '';
             const user = { username: result.username, role: result.role, spAccess: result.spAccess };
@@ -37,7 +37,6 @@ const handleLogout = () => {
     location.reload();
 };
 
-// NEW: A helper function to generate a secure, random token.
 const generateToken = () => {
     const randomValues = new Uint32Array(32);
     window.crypto.getRandomValues(randomValues);
@@ -64,12 +63,9 @@ const handleAddUser = async () => {
         return;
     }
 
-    // NEW: Generate the token automatically.
     const token = generateToken();
-    console.log(`Generated Token for new user "${usernameRes.value}": ${token}`);
 
     try {
-        // NEW: Send the generated token with the new user's data.
         const result = await postToServer({ 
             action: 'addUser', 
             username: usernameRes.value, 
