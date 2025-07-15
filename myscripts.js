@@ -20,6 +20,7 @@ const form = document.getElementById('attendance-form');
 const statusEl = document.getElementById('status');
 const submitButton = document.getElementById('submit-button');
 const financialCheckbox = document.getElementById('is-financial');
+const financialLabel = document.getElementById('financial-label');
 const proxyCheckbox = document.getElementById('is-proxy');
 const quorumDisplay = document.getElementById('quorum-display');
 const attendeeTableBody = document.getElementById('attendee-table-body');
@@ -394,6 +395,7 @@ const resetUiOnPlanChange = () => {
     checkboxContainer.innerHTML = '<p>Select a Strata Plan to begin.</p>';
     lotInput.value = '';
     lotInput.disabled = true;
+    financialLabel.lastChild.nodeValue = " Is Financial?";
 };
 
 const renderStrataPlans = (plans) => {
@@ -480,7 +482,7 @@ const checkAndLoadMeeting = async (sp) => {
         if (columnCheck.columnsExist) {
             initialData = await postToServer({ action: 'getInitialData', sp });
         } else {
-            const modalResponse = await showModal("Today's meeting has not been set up. Please enter the meeting type (e.g., AGM, EGM):", { showInput: true, confirmText: 'Set Up Meeting' });
+            const modalResponse = await showModal("Today's meeting has not been set up. Please enter the meeting type (e.g., AGM, EGM, SCM):", { showInput: true, confirmText: 'Set Up Meeting' });
             if (modalResponse.confirmed && modalResponse.value) {
                 initialData = await postToServer({ action: 'createAndFetchInitialData', sp, meetingType: modalResponse.value });
             } else {
@@ -492,6 +494,12 @@ const checkAndLoadMeeting = async (sp) => {
             currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
             currentTotalLots = initialData.totalLots;
             updateDisplay(sp);
+
+            if (initialData.meetingType && initialData.meetingType.toUpperCase() === 'SCM') {
+                financialLabel.lastChild.nodeValue = " Is Committee Member?";
+            } else {
+                financialLabel.lastChild.nodeValue = " Is Financial?";
+            }
         } else {
             throw new Error(initialData ? initialData.error : "Failed to get initial data.");
         }
@@ -572,7 +580,6 @@ const handleDelete = async (lotNumber) => {
     }
 };
 
-// MODIFIED: Reverted to fire-and-forget for PDF generation
 const handleEmailPdf = async () => {
     const sp = strataPlanSelect.value;
     if (!sp) {
@@ -592,7 +599,6 @@ const handleEmailPdf = async () => {
         statusEl.style.color = 'blue';
         emailPdfBtn.disabled = true;
 
-        // Fire-and-forget
         const body = { action: 'emailPdfReport', sp, email };
         const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
         if (sessionUser) {
@@ -605,11 +611,9 @@ const handleEmailPdf = async () => {
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(body)
         }).catch(err => {
-            // This error is expected for long-running scripts and can be ignored.
             console.warn("Ignoring expected 'Failed to fetch' error for long-running process.", err);
         });
 
-        // Give user feedback immediately
         setTimeout(() => {
             statusEl.textContent = `Report generation started. Please check ${email} in a moment.`;
             statusEl.style.color = 'green';
