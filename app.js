@@ -418,7 +418,12 @@ const handleFormSubmit = async (event) => {
     updateSyncButton();
     statusEl.textContent = `Lot ${lot} queued for submission.`;
     statusEl.style.color = 'green';
+    
+    // MODIFIED: Save and restore strata plan value
+    const selectedSP = strataPlanSelect.value;
     form.reset();
+    strataPlanSelect.value = selectedSP;
+
     companyRepGroup.style.display = 'none';
     proxyHolderGroup.style.display = 'none';
     checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
