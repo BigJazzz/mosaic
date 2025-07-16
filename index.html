@@ -41,9 +41,14 @@
                         <option value="">Loading plans...</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="lot-number">Lot Number</label>
-                    <input type="text" id="lot-number" required disabled>
+                <div class="form-group form-group-inline">
+                    <div class="lot-number-wrapper">
+                        <label for="lot-number">Lot Number</label>
+                        <input type="text" id="lot-number" required disabled>
+                    </div>
+                    <div class="proxy-checkbox-wrapper">
+                        <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Voting by Proxy?</label>
+                    </div>
                 </div>
                 <hr>
                 <div class="form-group">
@@ -62,8 +67,6 @@
                 </div>
                 <div class="form-group">
                     <label class="checkbox-item" id="financial-label"><input type="checkbox" id="is-financial"> Is Financial?</label>
-                    <label class="checkbox-item"><input type="checkbox" id="is-proxy"> Is a Proxy form?</label>
-                </div>
                 <button type="submit" id="submit-button">Submit</button>
                 <p id="status"></p>
             </form>

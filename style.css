@@ -78,11 +78,17 @@ input[type="text"], input[type="password"], select {
     font-size: 1rem; 
 }
 
-#checkbox-container { 
-    border: 1px solid #eee; 
-    padding: 1rem; 
-    border-radius: 4px; 
-    min-height: 50px; 
+#checkbox-container {
+    border: 1px solid #eee;
+    padding: 1rem;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.checkbox-item:last-child {
+    margin-bottom: 0;
 }
 
 .checkbox-item { 
@@ -271,3 +277,22 @@ button:disabled {
 .toast.success { background-color: #28a745; }
 .toast.error { background-color: #dc3545; }
 .toast.info { background-color: #17a2b8; }
+
+.form-group-inline {
+    display: flex;
+    align-items: flex-end;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.lot-number-wrapper {
+    flex-grow: 1;
+}
+
+.proxy-checkbox-wrapper {
+    padding-bottom: 0.75rem; /* Aligns checkbox with the input field */
+}
+
+.proxy-checkbox-wrapper .checkbox-item {
+    margin-bottom: 0;
+}

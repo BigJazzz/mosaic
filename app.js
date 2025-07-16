@@ -40,6 +40,7 @@ let strataPlanCache = null;
 let isSyncing = false;
 let currentSyncedAttendees = [];
 let currentTotalLots = 0;
+let autoSyncIntervalId = null;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
@@ -65,17 +66,28 @@ const initializeApp = (user) => {
     }
 
     updateSyncButton();
-    setInterval(syncSubmissions, 60000);
 };
-
-// --- Core App Logic ---
 
 const handlePlanSelection = async (sp) => {
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
     resetUiOnPlanChange();
+    submitButton.disabled = true;
+    
+    if (autoSyncIntervalId) {
+        clearInterval(autoSyncIntervalId);
+        autoSyncIntervalId = null;
+    }
+
     if (sp) {
-        await cacheAllNames(sp);
-        await checkAndLoadMeeting(sp);
+        try {
+            await cacheAllNames(sp);
+            await checkAndLoadMeeting(sp);
+            submitButton.disabled = false;
+            
+            autoSyncIntervalId = setInterval(syncSubmissions, 60000);
+        } catch (error) {
+            console.error("Failed to fully load plan:", error);
+        }
     }
 };
 
@@ -134,6 +146,12 @@ const cacheAllNames = async (sp) => {
     lotInput.disabled = true;
     checkboxContainer.innerHTML = '<p>Loading strata data...</p>';
 
+    const enableInputs = () => {
+        lotInput.disabled = false;
+        checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
+        lotInput.focus();
+    };
+
     const cachedItem = localStorage.getItem(cacheKey);
     if (cachedItem) {
         const { timestamp, names } = JSON.parse(cachedItem);
@@ -141,7 +159,8 @@ const cacheAllNames = async (sp) => {
         if (isCacheValid) {
             console.log(`[CLIENT] Using cached names for SP ${sp}.`);
             strataPlanCache = names;
-            showToast(`Strata Roll for SP ${sp} loaded from cache.`, 'info'); // NOTIFICATION ADDED
+            showToast(`Strata Roll for SP ${sp} loaded from cache.`, 'info');
+            enableInputs();
             return;
         } else {
             console.log(`[CLIENT] Cache for SP ${sp} is expired. Refetching.`);
@@ -156,22 +175,44 @@ const cacheAllNames = async (sp) => {
             const newCacheItem = { timestamp: new Date().getTime(), names: data.names };
             strataPlanCache = data.names;
             localStorage.setItem(cacheKey, JSON.stringify(newCacheItem));
-            showToast(`Strata Roll for SP ${sp} successfully loaded.`, 'success'); // NOTIFICATION ADDED
+            showToast(`Strata Roll for SP ${sp} successfully loaded.`, 'success');
+            enableInputs();
         } else { throw new Error(data.error); }
     } catch (error) {
        console.error(`[CLIENT] Could not load data for SP ${sp}. Error:`, error);
        checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
-       showToast(`Failed to load Strata Roll for SP ${sp}.`, 'error'); // NOTIFICATION ADDED
+       showToast(`Failed to load Strata Roll for SP ${sp}.`, 'error');
        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
 const populateStrataPlans = async () => {
+    const cacheKey = 'strata_plan_list';
+
+    // Check for a valid cached list first
+    const cachedItem = localStorage.getItem(cacheKey);
+    if (cachedItem) {
+        const { timestamp, plans } = JSON.parse(cachedItem);
+        const isCacheValid = (new Date().getTime() - timestamp) < CACHE_DURATION_MS;
+        if (isCacheValid) {
+            console.log('[CLIENT] Using cached strata plan list.');
+            renderStrataPlans(plans);
+            strataPlanSelect.disabled = false;
+            return; // Use the cached data
+        }
+    }
+
+    // If no valid cache, fetch from the server
     try {
+        console.log('[CLIENT] Fetching strata plan list from server.');
         const data = await postToServer({ action: 'getStrataPlans' });
-        if (data.success) {
+        if (data.success && data.plans) {
+            // Render the new data
             renderStrataPlans(data.plans);
             strataPlanSelect.disabled = false;
+            // Save the new data and timestamp to the cache
+            const newCacheItem = { timestamp: new Date().getTime(), plans: data.plans };
+            localStorage.setItem(cacheKey, JSON.stringify(newCacheItem));
         } else {
             throw new Error(data.error || "Server returned no plans.");
         }
@@ -204,6 +245,8 @@ const checkAndLoadMeeting = async (sp) => {
         if (initialData && initialData.success) {
             currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
             currentTotalLots = initialData.totalLots;
+            
+            cleanupQueuedSubmissions();
             updateDisplay(sp);
 
             if (initialData.meetingType) {
@@ -216,9 +259,6 @@ const checkAndLoadMeeting = async (sp) => {
             } else {
                 financialLabel.lastChild.nodeValue = " Is Financial?";
             }
-            lotInput.disabled = false;
-            checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
-            lotInput.focus();
         } else {
             throw new Error(initialData ? initialData.error : "Failed to get initial data.");
         }
@@ -226,6 +266,7 @@ const checkAndLoadMeeting = async (sp) => {
         console.error("[CLIENT] A critical error occurred during meeting load:", error);
         currentSyncedAttendees = [];
         currentTotalLots = 0;
+        cleanupQueuedSubmissions();
         updateDisplay(sp);
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'red';
@@ -474,3 +515,21 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeApp(sessionUser);
     }
 });
+
+const cleanupQueuedSubmissions = () => {
+    if (currentSyncedAttendees.length === 0) return;
+
+    const syncedLots = new Set(currentSyncedAttendees.map(a => String(a.lot)));
+    const queue = getSubmissionQueue();
+    if (queue.length === 0) return;
+
+    const initialQueueSize = queue.length;
+    const newQueue = queue.filter(item => !syncedLots.has(String(item.lot)));
+
+    if (newQueue.length < initialQueueSize) {
+        saveSubmissionQueue(newQueue);
+        const removedCount = initialQueueSize - newQueue.length;
+        const plural = removedCount === 1 ? 'entry' : 'entries';
+        showToast(`${removedCount} queued ${plural} removed as already synced.`, 'info');
+    }
+};
