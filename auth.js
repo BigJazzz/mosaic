@@ -1,8 +1,7 @@
-// fileName: auth.js
-
+// --- Authentication & Session Logic ---
 const handleLogin = async (event) => {
     event.preventDefault();
-    const username = document.getElementById('username').value.trim().toLowerCase();
+    const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
     const loginStatus = document.getElementById('login-status');
     
@@ -16,18 +15,16 @@ const handleLogin = async (event) => {
 
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
-        
-        // This is the correct condition based on your server's response
-        if (result.success && result.username) {
+        if (result.success) {
             loginStatus.textContent = '';
             const user = { username: result.username, role: result.role, spAccess: result.spAccess };
             sessionStorage.setItem('attendanceUser', JSON.stringify(user));
-            initializeApp(user); 
+            initializeApp(user);
         } else {
             throw new Error(result.error || 'Invalid username or password.');
         }
     } catch (error) {
-        loginStatus.textContent = `Login failed: Invalid username or password.`;
+        loginStatus.textContent = `Login failed: ${error.message}`;
         loginStatus.style.color = 'red';
     }
 };
@@ -37,58 +34,7 @@ const handleLogout = () => {
     location.reload();
 };
 
-const generateToken = () => {
-    const randomValues = new Uint32Array(32);
-    window.crypto.getRandomValues(randomValues);
-    return Array.from(randomValues, val => val.toString(36)).join('');
-};
-
-const handleAddUser = async () => {
-    const usernameRes = await showModal("Enter new user's username:", { showInput: true, confirmText: 'Next' });
-    if (!usernameRes.confirmed || !usernameRes.value) return;
-    
-    const passwordRes = await showModal("Enter new user's password:", { showInput: true, inputType: 'password', confirmText: 'Next' });
-    if (!passwordRes.confirmed || !passwordRes.value) return;
-
-    const roleRes = await showModal("Enter role (Admin or User):", { showInput: true, confirmText: 'Next' });
-    if (!roleRes.confirmed || !roleRes.value) return;
-    
-    const spAccessRes = await showModal("Enter SP Access number (or leave blank for all):", { showInput: true, confirmText: 'Add User' });
-    if (!spAccessRes.confirmed) return;
-
-    const role = roleRes.value.trim();
-    if (role !== 'Admin' && role !== 'User') {
-        document.getElementById('status').textContent = 'Invalid role. Must be "Admin" or "User".';
-        document.getElementById('status').style.color = 'red';
-        return;
-    }
-
-    const token = generateToken();
-
-    try {
-        const result = await postToServer({ 
-            action: 'addUser', 
-            username: usernameRes.value, 
-            password: passwordRes.value, 
-            role,
-            spAccess: spAccessRes.value,
-            token: token 
-        });
-
-        if (result.success) {
-            document.getElementById('status').textContent = 'User added successfully.';
-            document.getElementById('status').style.color = 'green';
-            loadUsers();
-        } else {
-            throw new Error(result.error);
-        }
-    } catch (error) {
-        document.getElementById('status').textContent = `Failed to add user: ${error.message}`;
-        document.getElementById('status').style.color = 'red';
-        if (error.message.includes("Authentication failed")) handleLogout();
-    }
-};
-
+// --- User Management (Admin) ---
 const loadUsers = async () => {
     try {
         const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
@@ -118,6 +64,48 @@ const loadUsers = async () => {
     }
 };
 
+const handleAddUser = async () => {
+    const usernameRes = await showModal("Enter new user's username:", { showInput: true, confirmText: 'Next' });
+    if (!usernameRes.confirmed || !usernameRes.value) return;
+    
+    const passwordRes = await showModal("Enter new user's password:", { showInput: true, inputType: 'password', confirmText: 'Next' });
+    if (!passwordRes.confirmed || !passwordRes.value) return;
+
+    const roleRes = await showModal("Enter role (Admin or User):", { showInput: true, confirmText: 'Next' });
+    if (!roleRes.confirmed || !roleRes.value) return;
+    
+    const spAccessRes = await showModal("Enter SP Access number (or leave blank for all):", { showInput: true, confirmText: 'Add User' });
+    if (!spAccessRes.confirmed) return;
+
+    const role = roleRes.value.trim();
+    if (role !== 'Admin' && role !== 'User') {
+        document.getElementById('status').textContent = 'Invalid role. Must be "Admin" or "User".';
+        document.getElementById('status').style.color = 'red';
+        return;
+    }
+
+    try {
+        const result = await postToServer({ 
+            action: 'addUser', 
+            username: usernameRes.value, 
+            password: passwordRes.value, 
+            role,
+            spAccess: spAccessRes.value 
+        });
+        if (result.success) {
+            document.getElementById('status').textContent = 'User added successfully.';
+            document.getElementById('status').style.color = 'green';
+            loadUsers();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        document.getElementById('status').textContent = `Failed to add user: ${error.message}`;
+        document.getElementById('status').style.color = 'red';
+        if (error.message.includes("Authentication failed")) handleLogout();
+    }
+};
+
 const handleRemoveUser = async (e) => {
     if (!e.target.matches('.delete-btn[data-username]')) return;
     const username = e.target.dataset.username;
@@ -141,6 +129,7 @@ const handleRemoveUser = async (e) => {
     }
 };
 
+// --- User Management (Self) ---
 const handleChangePassword = async () => {
     const passwordRes = await showModal("Enter your new password:", { showInput: true, inputType: 'password', confirmText: 'Change Password' });
     if (!passwordRes.confirmed || !passwordRes.value) return;

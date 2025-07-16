@@ -1,5 +1,3 @@
-// fileName: app.js
-
 // --- DOM Elements ---
 const loginSection = document.getElementById('login-section');
 const mainAppSection = document.getElementById('main-app');
@@ -42,12 +40,9 @@ let strataPlanCache = null;
 let isSyncing = false;
 let currentSyncedAttendees = [];
 let currentTotalLots = 0;
-// NOTE: These constants are now defined in utils.js or config.js in some versions.
-// This version assumes they are defined here for simplicity of a single-file fix.
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
-// FIX: This initializeApp function now correctly accepts a user object as an argument.
 const initializeApp = (user) => {
     loginSection.classList.add('hidden');
     mainAppSection.classList.remove('hidden');
@@ -146,6 +141,7 @@ const cacheAllNames = async (sp) => {
         if (isCacheValid) {
             console.log(`[CLIENT] Using cached names for SP ${sp}.`);
             strataPlanCache = names;
+            showToast(`Strata Roll for SP ${sp} loaded from cache.`, 'info'); // NOTIFICATION ADDED
             return;
         } else {
             console.log(`[CLIENT] Cache for SP ${sp} is expired. Refetching.`);
@@ -160,22 +156,17 @@ const cacheAllNames = async (sp) => {
             const newCacheItem = { timestamp: new Date().getTime(), names: data.names };
             strataPlanCache = data.names;
             localStorage.setItem(cacheKey, JSON.stringify(newCacheItem));
+            showToast(`Strata Roll for SP ${sp} successfully loaded.`, 'success'); // NOTIFICATION ADDED
         } else { throw new Error(data.error); }
     } catch (error) {
        console.error(`[CLIENT] Could not load data for SP ${sp}. Error:`, error);
        checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
+       showToast(`Failed to load Strata Roll for SP ${sp}.`, 'error'); // NOTIFICATION ADDED
        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
 const populateStrataPlans = async () => {
-    // ADDED: A defensive check to ensure a user session exists before making a server call.
-    if (!sessionStorage.getItem('attendanceUser')) {
-        console.error("[CLIENT] FATAL: populateStrataPlans called without a user in sessionStorage. Forcing logout.");
-        handleLogout();
-        return;
-    }
-
     try {
         const data = await postToServer({ action: 'getStrataPlans' });
         if (data.success) {
@@ -471,17 +462,13 @@ document.addEventListener('DOMContentLoaded', () => {
     emailPdfBtn.addEventListener('click', handleEmailPdf);
     syncBtn.addEventListener('click', syncSubmissions);
     clearCacheBtn.addEventListener('click', handleClearCache);
-    lotInput.addEventListener('blur', fetchNames);
+    lotInput.addEventListener('input', debounce(fetchNames, 300)); // 300ms delay
     form.addEventListener('submit', handleFormSubmit);
     
     strataPlanSelect.addEventListener('change', (e) => {
         handlePlanSelection(e.target.value);
     });
 
-    // --- CORRECTED LOGIC ---
-    // This correctly checks for a user in the session storage.
-    // If a user is found, it initializes the app.
-    // Otherwise, the user will be presented with the login screen.
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
     if (sessionUser) {
         initializeApp(sessionUser);

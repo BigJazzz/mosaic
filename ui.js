@@ -1,5 +1,3 @@
-// fileName: ui.js
-
 // --- UI & Rendering ---
 const updateDisplay = (sp) => {
     if (!sp) return;
@@ -37,8 +35,16 @@ const renderStrataPlans = (plans) => {
         option.textContent = `${plan.sp} - ${plan.suburb}`;
         strataPlanSelect.appendChild(option);
     });
+
+    // Find the saved strata plan from the cookie
     const savedSP = document.cookie.split('; ').find(row => row.startsWith('selectedSP='))?.split('=')[1];
-    if (savedSP) strataPlanSelect.value = savedSP;
+
+    // If a saved plan exists, set the value and trigger the change event
+    if (savedSP && strataPlanSelect.querySelector(`option[value="${savedSP}"]`)) {
+        strataPlanSelect.value = savedSP;
+        // Add this line to manually fire the event
+        strataPlanSelect.dispatchEvent(new Event('change'));
+    }
 };
 
 const renderAttendeeTable = (attendees) => {

@@ -1,42 +1,36 @@
-// This import requires this file to be loaded as type="module" in index.html
-import { APPS_SCRIPT_URL } from './config.js';
-
-// --- Helper for making POST requests (Auth Revamp) ---
+// --- Helper for making POST requests ---
 const postToServer = async (body) => {
-    // Token is now retrieved and sent in the header, not the body.
-    const token = sessionStorage.getItem('attendanceAuthToken');
-    const headers = { 'Content-Type': 'text/plain' };
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+    if (sessionUser) {
+        body.user = sessionUser;
     }
-
     console.log('[CLIENT] Making POST request to server with body:', body);
     const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'cors',
-        headers: headers,
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(body)
     });
-
-    // Centralized check for authentication failure.
-    if (response.status === 401 || response.status === 403) {
-        console.error('[CLIENT] Authentication failed. Logging out.');
-        // This function is defined in auth.js but should be available globally.
-        handleLogout(); 
-        throw new Error('Authentication failed. Please log in again.');
-    }
-    
     if (!response.ok) {
         console.error('[CLIENT] Network response was not ok.', response);
-        const errorText = await response.text();
-        throw new Error(`Network Error: ${response.statusText} - ${errorText}`);
+        throw new Error(`Network response was not ok: ${response.statusText}`);
     }
-
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
+    // The check for auth failure is now handled by the function that calls postToServer.
     return jsonResponse;
 };
 
+// --- Debounce helper function ---
+const debounce = (func, delay) => {
+    let timeoutId;
+    return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+            func.apply(this, args);
+        }, delay);
+    };
+};
 
 // --- Modal Logic ---
 let modalResolve = null;
@@ -78,26 +72,6 @@ const showModal = (text, { showInput = false, inputType = 'text', confirmText = 
 };
 
 
-// --- Notification "Toast" System ---
-const showToast = (message, type = 'info', duration = 4000) => {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    
-    container.appendChild(toast);
-    
-    // Animate in
-    setTimeout(() => toast.classList.add('show'), 10);
-
-    // Animate out and remove
-    setTimeout(() => {
-        toast.classList.remove('show');
-        toast.addEventListener('transitionend', () => toast.remove());
-    }, duration);
-};
-
-
 // --- Caching & Queue Logic ---
 const getSubmissionQueue = () => JSON.parse(localStorage.getItem('submissionQueue') || '[]');
 const saveSubmissionQueue = (queue) => localStorage.setItem('submissionQueue', JSON.stringify(queue));
@@ -109,11 +83,36 @@ const clearStrataCache = () => {
     });
 };
 
-// --- FIX: Expose necessary functions to the global scope ---
-// This allows classic scripts like auth.js to see functions from this module.
-window.postToServer = postToServer;
-window.showModal = showModal;
-window.showToast = showToast;
-window.getSubmissionQueue = getSubmissionQueue;
-window.saveSubmissionQueue = saveSubmissionQueue;
-window.clearStrataCache = clearStrataCache;
+// --- Toaster Notification Logic ---
+
+// Helper function to find or create the toast container
+const ensureToastContainer = () => {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        console.log('Toast container not found. Creating one.');
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    return container;
+};
+
+const showToast = (message, type = 'info', duration = 3000) => {
+    const container = ensureToastContainer(); // This now guarantees the container exists
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    // Animate in
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10); // Small delay to allow CSS transition
+
+    // Animate out and remove
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, duration);
+};
