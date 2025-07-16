@@ -1,29 +1,5 @@
 // fileName: app.js
 
-// --- Hotfix to prevent auth-related page reloads during debugging ---
-// This intercepts calls to the server and handles authentication errors
-// without triggering a page reload, allowing for easier debugging.
-if (window.postToServer) {
-    const originalPostToServer = window.postToServer;
-    window.postToServer = async (body) => {
-        try {
-            // We still call the original function to make the actual request
-            return await originalPostToServer(body);
-        } catch (error) {
-            // We only catch the specific authentication error
-            if (error.message && error.message.includes('Authentication failed')) {
-                console.warn(`[HOTFIX] Suppressed authentication error to prevent page reload: ${error.message}`);
-                // Return a standard failure object that the app's functions can handle
-                // without crashing or triggering a logout.
-                return { success: false, error: error.message };
-            }
-            // For any other type of error, we let it proceed as normal.
-            throw error;
-        }
-    };
-}
-
-
 // --- DOM Elements ---
 const loginSection = document.getElementById('login-section');
 const mainAppSection = document.getElementById('main-app');
@@ -148,7 +124,7 @@ const syncSubmissions = async () => {
         console.error('[CLIENT] Sync failed! Error:', error);
         statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
-        // if (error.message.includes("Authentication failed")) handleLogout();
+        if (error.message.includes("Authentication failed")) handleLogout();
     } finally {
         isSyncing = false;
         await checkAndLoadMeeting(strataPlanSelect.value); 
@@ -188,7 +164,7 @@ const cacheAllNames = async (sp) => {
     } catch (error) {
        console.error(`[CLIENT] Could not load data for SP ${sp}. Error:`, error);
        checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
-       // if (error.message.includes("Authentication failed")) handleLogout();
+       if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -204,7 +180,7 @@ const populateStrataPlans = async () => {
     } catch (error) {
         console.error("[CLIENT] Could not fetch strata plans:", error);
         strataPlanSelect.innerHTML = '<option value="">Could not load plans</option>';
-        // if (error.message.includes("Authentication failed")) handleLogout();
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -255,7 +231,7 @@ const checkAndLoadMeeting = async (sp) => {
         updateDisplay(sp);
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'red';
-        // if (error.message.includes("Authentication failed")) handleLogout();
+        if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -322,7 +298,7 @@ const handleDelete = async (lotNumber) => {
         } catch (error) {
             console.error('Deletion Error:', error);
             statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
-            // if (error.message.includes("Authentication failed")) handleLogout();
+            if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
 };
@@ -405,7 +381,7 @@ const handleChangeMeetingType = async () => {
         } catch (error) {
             statusEl.textContent = `Error: ${error.message}`;
             statusEl.style.color = 'red';
-            // if (error.message.includes("Authentication failed")) handleLogout();
+            if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
 };
@@ -495,17 +471,12 @@ document.addEventListener('DOMContentLoaded', () => {
         handlePlanSelection(e.target.value);
     });
 
-    /*
-    // --- COMMENTED OUT THIS BLOCK ---
+    // --- CORRECTED LOGIC ---
+    // This correctly checks for a user in the session storage.
+    // If a user is found, it initializes the app.
+    // Otherwise, the user will be presented with the login screen.
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
     if (sessionUser) {
         initializeApp(sessionUser);
     }
-    */
-
-    // --- ADDED THIS BLOCK TO BYPASS LOGIN ---
-    // Create a dummy user with Admin privileges to bypass login
-    const tempUser = { username: 'Temp Admin', role: 'Admin', spAccess: null };
-    // Initialize the app directly
-    initializeApp(tempUser);
 });
