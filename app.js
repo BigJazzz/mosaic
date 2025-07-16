@@ -1,5 +1,29 @@
 // fileName: app.js
 
+// --- Hotfix to prevent auth-related page reloads during debugging ---
+// This intercepts calls to the server and handles authentication errors
+// without triggering a page reload, allowing for easier debugging.
+if (window.postToServer) {
+    const originalPostToServer = window.postToServer;
+    window.postToServer = async (body) => {
+        try {
+            // We still call the original function to make the actual request
+            return await originalPostToServer(body);
+        } catch (error) {
+            // We only catch the specific authentication error
+            if (error.message && error.message.includes('Authentication failed')) {
+                console.warn(`[HOTFIX] Suppressed authentication error to prevent page reload: ${error.message}`);
+                // Return a standard failure object that the app's functions can handle
+                // without crashing or triggering a logout.
+                return { success: false, error: error.message };
+            }
+            // For any other type of error, we let it proceed as normal.
+            throw error;
+        }
+    };
+}
+
+
 // --- DOM Elements ---
 const loginSection = document.getElementById('login-section');
 const mainAppSection = document.getElementById('main-app');
