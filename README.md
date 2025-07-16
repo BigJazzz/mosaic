@@ -45,7 +45,14 @@ This app is designed to provide a flexible, dynamic way to mark attendance at me
 	- 🟦: uploaded; proxy holder
 - The list automatically updates every 60 seconds or on batch submission
 - Incorrect attendance entries can be deleted both before and after online submission
- - During the sync window, the option to delete will be disabled
+	- During the sync window, the option to delete will be disabled
 - The email report will send all submitted attendees to the email provided
 
 ### Admin Panel
+- Lists the current users
+	- Shows their current role, the strata plan thye have access to, and provides the option to delete the account
+- Provides buttons to
+	- Add a new user
+  	- Sync submissions manually
+  	- Clear the entire cache, including the pre-selected strata plan
+  	- Logout
