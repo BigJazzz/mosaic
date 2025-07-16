@@ -169,6 +169,13 @@ const cacheAllNames = async (sp) => {
 };
 
 const populateStrataPlans = async () => {
+    // ADDED: A defensive check to ensure a user session exists before making a server call.
+    if (!sessionStorage.getItem('attendanceUser')) {
+        console.error("[CLIENT] FATAL: populateStrataPlans called without a user in sessionStorage. Forcing logout.");
+        handleLogout();
+        return;
+    }
+
     try {
         const data = await postToServer({ action: 'getStrataPlans' });
         if (data.success) {
