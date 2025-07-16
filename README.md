@@ -42,7 +42,7 @@ This app is designed to provide a flexible, dynamic way to mark attendance at me
 	- 🟥: cached locally and not submitted
 	- 🟩: uploaded; individual lot owner
 	- 🟪: uploaded; company lot owner
-	- 🟦: uploaded: proxy holder
+	- 🟦: uploaded; proxy holder
 - The list automatically updates every 60 seconds or on batch submission
 - Incorrect attendance entries can be deleted both before and after online submission
  - During the sync window, the option to delete will be disabled
