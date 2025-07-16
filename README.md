@@ -1,10 +1,10 @@
 # Strata Attendance Management
 ## Outline
-This app is designed to provide a flexible, dynamic way to mark attendance at meetings, both in person and via proxy. It contains the following modules
-- User login and management
+This app is designed to provide a flexible, dynamic way to mark attendance at meetings, both in person and via proxy. It contains the following modules:
 - Attendee sign in
 - Current attendees list
 - PDF report and emailer
+- Admin panel
 
 ## Features
 ### Access & Authorisation
@@ -39,4 +39,13 @@ This app is designed to provide a flexible, dynamic way to mark attendance at me
 
 ### Current Attendees List
 - Shows the captured attendance, colour-coded for easy reference
- - ```diff - Red```
+ - 🟥: cached locally and not submitted
+ - 🟩: uploaded; individual lot owner
+ - 🟪: uploaded; company lot owner
+ - 🟦: uploaded: proxy holder
+- The list automatically updates every 60 seconds or on batch submission
+- Incorrect attendance entries can be deleted both before and after online submission
+ - During the sync window, the option to delete will be disabled
+- The email report will send all submitted attendees to the email provided
+
+### Admin Panel
