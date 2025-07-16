@@ -124,7 +124,7 @@ const syncSubmissions = async () => {
         console.error('[CLIENT] Sync failed! Error:', error);
         statusEl.textContent = `Sync failed. Items remain queued.`;
         statusEl.style.color = 'red';
-        if (error.message.includes("Authentication failed")) handleLogout();
+        // if (error.message.includes("Authentication failed")) handleLogout();
     } finally {
         isSyncing = false;
         await checkAndLoadMeeting(strataPlanSelect.value); 
@@ -164,7 +164,7 @@ const cacheAllNames = async (sp) => {
     } catch (error) {
        console.error(`[CLIENT] Could not load data for SP ${sp}. Error:`, error);
        checkboxContainer.innerHTML = `<p style="color: red;">Could not load data for this plan.</p>`;
-       if (error.message.includes("Authentication failed")) handleLogout();
+       // if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -180,7 +180,7 @@ const populateStrataPlans = async () => {
     } catch (error) {
         console.error("[CLIENT] Could not fetch strata plans:", error);
         strataPlanSelect.innerHTML = '<option value="">Could not load plans</option>';
-        if (error.message.includes("Authentication failed")) handleLogout();
+        // if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -231,7 +231,7 @@ const checkAndLoadMeeting = async (sp) => {
         updateDisplay(sp);
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'red';
-        if (error.message.includes("Authentication failed")) handleLogout();
+        // if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
@@ -298,7 +298,7 @@ const handleDelete = async (lotNumber) => {
         } catch (error) {
             console.error('Deletion Error:', error);
             statusEl.textContent = `Error deleting Lot ${lotNumber}: ${error.message}`;
-            if (error.message.includes("Authentication failed")) handleLogout();
+            // if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
 };
@@ -381,7 +381,7 @@ const handleChangeMeetingType = async () => {
         } catch (error) {
             statusEl.textContent = `Error: ${error.message}`;
             statusEl.style.color = 'red';
-            if (error.message.includes("Authentication failed")) handleLogout();
+            // if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
 };
