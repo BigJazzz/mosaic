@@ -446,7 +446,6 @@ proxyCheckbox.addEventListener('change', () => {
 });
 
 // --- Initial Load ---
-// FIX: This logic correctly checks for a stored user session and initializes the app.
 document.addEventListener('DOMContentLoaded', () => {
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
@@ -472,15 +471,15 @@ document.addEventListener('DOMContentLoaded', () => {
         handlePlanSelection(e.target.value);
     });
 
-    //const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
-    //if (sessionUser) {
-    //    initializeApp(sessionUser);
-    //}
-document.addEventListener('DOMContentLoaded', () => {
-    // ... (keep the other event listeners above this section)
+    /*
+    // --- COMMENTED OUT THIS BLOCK ---
+    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
+    if (sessionUser) {
+        initializeApp(sessionUser);
+    }
+    */
 
-
-    // --- ADD THIS BLOCK ---
+    // --- ADDED THIS BLOCK TO BYPASS LOGIN ---
     // Create a dummy user with Admin privileges to bypass login
     const tempUser = { username: 'Temp Admin', role: 'Admin', spAccess: null };
     // Initialize the app directly
