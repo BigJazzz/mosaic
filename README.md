@@ -1,8 +1,8 @@
-# Strata Attendance Management
+# Strata Meeting Attendance Management
 This app is designed to provide a flexible, dynamic way to mark attendance at meetings, both in person and via proxy. It contains the following modules:
+- Strata plan selection (admin only)
 - Attendee sign in
 - Current attendees list
-- PDF report and emailer
 - Admin panel
 
 ---
