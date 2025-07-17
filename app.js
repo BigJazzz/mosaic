@@ -226,7 +226,7 @@ const populateStrataPlans = async () => {
 const checkAndLoadMeeting = async (sp) => {
     if (!sp) return;
     document.getElementById('quorum-display').textContent = 'Loading...';
-    attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>`;
+    attendeeTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Loading...</td></tr>`;
     try {
         const columnCheck = await postToServer({ action: 'checkTodaysColumns', sp });
         if (!columnCheck.success) throw new Error(columnCheck.error);
