@@ -54,17 +54,24 @@ const renderAttendeeTable = (attendees) => {
     const personLabel = (syncedCount === 1) ? 'person' : 'people';
     personCountSpan.textContent = `(${syncedCount} ${personLabel})`;
     attendeeTableBody.innerHTML = '';
+
     if (!attendees || attendees.length === 0) {
-        attendeeTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">No attendees yet.</td></tr>`;
+        attendeeTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No attendees yet.</td></tr>`;
         return;
     }
+
     attendees.sort((a, b) => a.lot - b.lot);
     attendees.forEach(item => {
+        // Corrected lookup for the Unit Number from the updated cache
+        const lotData = strataPlanCache ? strataPlanCache[item.lot] : null;
+        const unitNumber = lotData ? (lotData[0] || 'N/A') : 'N/A'; // Unit is now at index 0
+
         const isQueued = item.status === 'queued';
         const name = item.name || (item.proxyHolderLot ? `Proxy - Lot ${item.proxyHolderLot}` : item.names.join(', '));
         const isProxy = String(name).startsWith('Proxy - Lot');
         const isCompany = !isProxy && /\b(P\/L|Pty Ltd|Limited)\b/i.test(name);
         let ownerRepName = '', companyName = '', rowColor = isQueued ? '#f5e0df' : '#d4e3c1';
+        
         if (isProxy) {
             ownerRepName = name;
             if (!isQueued) rowColor = '#c1e1e3';
@@ -76,12 +83,14 @@ const renderAttendeeTable = (attendees) => {
         } else {
             ownerRepName = name;
         }
+
         const row = document.createElement('tr');
         row.style.backgroundColor = rowColor;
         const deleteButton = isQueued 
             ? `<button class="delete-btn" data-type="queued" data-submission-id="${item.submissionId}">Delete</button>`
             : `<button class="delete-btn" data-type="synced" data-lot="${item.lot}">Delete</button>`;
-        row.innerHTML = `<td>${item.lot}</td><td>${ownerRepName}</td><td>${companyName}</td><td>${deleteButton}</td>`;
+        
+        row.innerHTML = `<td>${item.lot}</td><td>${unitNumber}</td><td>${ownerRepName}</td><td>${companyName}</td><td>${deleteButton}</td>`;
         attendeeTableBody.appendChild(row);
     });
 };
