@@ -283,8 +283,10 @@ const fetchNames = () => {
     if (!strataPlanCache) { checkboxContainer.innerHTML = `<p style="color: red;">Strata data is not loaded.</p>`; return; }
     const namesFromCache = strataPlanCache[lot];
     if (namesFromCache) {
-        const mainContactName = namesFromCache[0] || '';
-        const fullNameOnTitle = namesFromCache[1] || '';
+        // Corrected indices: [0] is now Unit, so names are at [1] and [2]
+        const mainContactName = namesFromCache[1] || '';
+        const fullNameOnTitle = namesFromCache[2] || '';
+        
         let finalNameString = mainContactName;
         const hasTitles = /\b(Mr|Mrs|Ms|Miss)\b/i.test(mainContactName);
         const firstWord = mainContactName.split(' ')[0] || '';
