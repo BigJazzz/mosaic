@@ -12,7 +12,7 @@ const updateDisplay = (sp) => {
 const resetUiOnPlanChange = () => {
     currentSyncedAttendees = [];
     currentTotalLots = 0;
-    document.getElementById('attendee-table-body').innerHTML = `<tr><td colspan="4" style="text-align:center;">Select a plan to see attendees.</td></tr>`;
+    document.getElementById('attendee-table-body').innerHTML = `<tr><td colspan="5" style="text-align:center;">Select a plan to see attendees.</td></tr>`;
     document.getElementById('person-count').textContent = `(0 people)`;
     document.getElementById('quorum-display').innerHTML = `Quorum: ...%`;
     document.getElementById('quorum-display').style.backgroundColor = '#6c757d';
@@ -36,13 +36,9 @@ const renderStrataPlans = (plans) => {
         strataPlanSelect.appendChild(option);
     });
 
-    // Find the saved strata plan from the cookie
     const savedSP = document.cookie.split('; ').find(row => row.startsWith('selectedSP='))?.split('=')[1];
-
-    // If a saved plan exists, set the value and trigger the change event
     if (savedSP && strataPlanSelect.querySelector(`option[value="${savedSP}"]`)) {
         strataPlanSelect.value = savedSP;
-        // Add this line to manually fire the event
         strataPlanSelect.dispatchEvent(new Event('change'));
     }
 };
@@ -62,9 +58,8 @@ const renderAttendeeTable = (attendees) => {
 
     attendees.sort((a, b) => a.lot - b.lot);
     attendees.forEach(item => {
-        // Corrected lookup for the Unit Number from the updated cache
         const lotData = strataPlanCache ? strataPlanCache[item.lot] : null;
-        const unitNumber = lotData ? (lotData[0] || 'N/A') : 'N/A'; // Unit is now at index 0
+        const unitNumber = lotData ? (lotData[0] || 'N/A') : 'N/A';
 
         const isQueued = item.status === 'queued';
         const name = item.name || (item.proxyHolderLot ? `Proxy - Lot ${item.proxyHolderLot}` : item.names.join(', '));
@@ -98,6 +93,10 @@ const renderAttendeeTable = (attendees) => {
 const updateQuorumDisplay = (count = 0, total = 0) => {
     const quorumDisplay = document.getElementById('quorum-display');
     const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-    quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
-    quorumDisplay.style.backgroundColor = percentage >= 25 ? '#28a745' : '#dc3545';
+    
+    const quorumThreshold = Math.ceil(total * 0.25);
+    const isQuorumMet = count >= quorumThreshold;
+
+    quorumDisplay.innerHTML = `Financial Lots Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
+    quorumDisplay.style.backgroundColor = isQuorumMet ? '#28a745' : '#dc3545';
 };
