@@ -91,6 +91,24 @@ const handlePlanSelection = async (sp) => {
     }
 };
 
+const cleanupQueuedSubmissions = () => {
+    if (currentSyncedAttendees.length === 0) return;
+
+    const syncedLots = new Set(currentSyncedAttendees.map(a => String(a.lot)));
+    const queue = getSubmissionQueue();
+    if (queue.length === 0) return;
+
+    const initialQueueSize = queue.length;
+    const newQueue = queue.filter(item => !syncedLots.has(String(item.lot)));
+
+    if (newQueue.length < initialQueueSize) {
+        saveSubmissionQueue(newQueue);
+        const removedCount = initialQueueSize - newQueue.length;
+        const plural = removedCount === 1 ? 'entry' : 'entries';
+        showToast(`${removedCount} queued ${plural} removed as already synced.`, 'info');
+    }
+};
+
 const updateSyncButton = () => {
     const queue = getSubmissionQueue();
     if (queue.length > 0) {
@@ -189,7 +207,6 @@ const cacheAllNames = async (sp) => {
 const populateStrataPlans = async () => {
     const cacheKey = 'strata_plan_list';
 
-    // Check for a valid cached list first
     const cachedItem = localStorage.getItem(cacheKey);
     if (cachedItem) {
         const { timestamp, plans } = JSON.parse(cachedItem);
@@ -198,19 +215,16 @@ const populateStrataPlans = async () => {
             console.log('[CLIENT] Using cached strata plan list.');
             renderStrataPlans(plans);
             strataPlanSelect.disabled = false;
-            return; // Use the cached data
+            return;
         }
     }
 
-    // If no valid cache, fetch from the server
     try {
         console.log('[CLIENT] Fetching strata plan list from server.');
         const data = await postToServer({ action: 'getStrataPlans' });
         if (data.success && data.plans) {
-            // Render the new data
             renderStrataPlans(data.plans);
             strataPlanSelect.disabled = false;
-            // Save the new data and timestamp to the cache
             const newCacheItem = { timestamp: new Date().getTime(), plans: data.plans };
             localStorage.setItem(cacheKey, JSON.stringify(newCacheItem));
         } else {
@@ -234,9 +248,28 @@ const checkAndLoadMeeting = async (sp) => {
         if (columnCheck.columnsExist) {
             initialData = await postToServer({ action: 'getInitialData', sp });
         } else {
-            const modalResponse = await showModal("Today's meeting has not been set up. Please enter the meeting type (e.g., AGM, EGM, SCM):", { showInput: true, confirmText: 'Set Up Meeting' });
-            if (modalResponse.confirmed && modalResponse.value) {
-                initialData = await postToServer({ action: 'createAndFetchInitialData', sp, meetingType: modalResponse.value });
+            const meetingTypeRes = await showModal("Today's meeting has not been set up. Please enter the meeting type (e.g., AGM, EGM):", { showInput: true, confirmText: 'Next' });
+            if (meetingTypeRes.confirmed && meetingTypeRes.value) {
+                const meetingType = meetingTypeRes.value;
+                let financialLots = null;
+
+                if (meetingType.toUpperCase() !== 'SCM') {
+                    const financialLotsRes = await showModal("Enter the Number of Financial Lots:", { showInput: true, inputType: 'number', confirmText: 'Set Up Meeting' });
+                    if (financialLotsRes.confirmed && financialLotsRes.value) {
+                        financialLots = financialLotsRes.value;
+                    } else {
+                         resetUiOnPlanChange();
+                         return;
+                    }
+                }
+                
+                initialData = await postToServer({ 
+                    action: 'createAndFetchInitialData', 
+                    sp, 
+                    meetingType,
+                    financialLots
+                });
+
             } else {
                 resetUiOnPlanChange();
                 return;
@@ -253,12 +286,9 @@ const checkAndLoadMeeting = async (sp) => {
                 meetingTitle.textContent = `Attendance Form - ${initialData.meetingType}`;
                 meetingDate.textContent = new Date().toLocaleDateString("en-AU", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             }
+            
+            financialLabel.lastChild.nodeValue = " Is Financial?";
 
-            if (initialData.meetingType && initialData.meetingType.toUpperCase() === 'SCM') {
-                financialLabel.lastChild.nodeValue = " Is Committee Member?";
-            } else {
-                financialLabel.lastChild.nodeValue = " Is Financial?";
-            }
         } else {
             throw new Error(initialData ? initialData.error : "Failed to get initial data.");
         }
@@ -283,7 +313,6 @@ const fetchNames = () => {
     if (!strataPlanCache) { checkboxContainer.innerHTML = `<p style="color: red;">Strata data is not loaded.</p>`; return; }
     const namesFromCache = strataPlanCache[lot];
     if (namesFromCache) {
-        // Corrected indices: [0] is now Unit, so names are at [1] and [2]
         const mainContactName = namesFromCache[1] || '';
         const fullNameOnTitle = namesFromCache[2] || '';
         
@@ -415,7 +444,7 @@ const handleChangeMeetingType = async () => {
             if (result.success) {
                 statusEl.textContent = "Meeting type updated successfully.";
                 statusEl.style.color = 'green';
-                await checkAndLoadMeeting(sp); // Refresh to show changes
+                await checkAndLoadMeeting(sp);
             } else {
                 throw new Error(result.error);
             }
@@ -491,7 +520,29 @@ document.addEventListener('DOMContentLoaded', () => {
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
     addUserBtn.addEventListener('click', handleAddUser);
-    userListBody.addEventListener('click', handleRemoveUser);
+    
+    userListBody.addEventListener('change', (e) => {
+        if (e.target.classList.contains('user-actions-select')) {
+            const username = e.target.dataset.username;
+            const action = e.target.value;
+
+            switch(action) {
+                case 'change_sp':
+                    handleChangeSpAccess(username);
+                    break;
+                case 'reset_password':
+                    handleResetPassword(username);
+                    break;
+                case 'remove':
+                    const fakeButton = document.createElement('button');
+                    fakeButton.dataset.username = username;
+                    handleRemoveUser({ target: fakeButton });
+                    break;
+            }
+            e.target.value = "";
+        }
+    });
+
     changePasswordBtn.addEventListener('click', handleChangePassword);
     changeMeetingTypeBtn.addEventListener('click', handleChangeMeetingType);
     
@@ -505,7 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
     emailPdfBtn.addEventListener('click', handleEmailPdf);
     syncBtn.addEventListener('click', syncSubmissions);
     clearCacheBtn.addEventListener('click', handleClearCache);
-    lotInput.addEventListener('input', debounce(fetchNames, 300)); // 300ms delay
+    lotInput.addEventListener('input', debounce(fetchNames, 300));
     form.addEventListener('submit', handleFormSubmit);
     
     strataPlanSelect.addEventListener('change', (e) => {
@@ -517,21 +568,3 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeApp(sessionUser);
     }
 });
-
-const cleanupQueuedSubmissions = () => {
-    if (currentSyncedAttendees.length === 0) return;
-
-    const syncedLots = new Set(currentSyncedAttendees.map(a => String(a.lot)));
-    const queue = getSubmissionQueue();
-    if (queue.length === 0) return;
-
-    const initialQueueSize = queue.length;
-    const newQueue = queue.filter(item => !syncedLots.has(String(item.lot)));
-
-    if (newQueue.length < initialQueueSize) {
-        saveSubmissionQueue(newQueue);
-        const removedCount = initialQueueSize - newQueue.length;
-        const plural = removedCount === 1 ? 'entry' : 'entries';
-        showToast(`${removedCount} queued ${plural} removed as already synced.`, 'info');
-    }
-};
