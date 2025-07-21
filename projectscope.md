@@ -3,8 +3,7 @@
 - Strata Plans - populated from Google Sheets ID 143EspDcO0leMPNnUE_XJIs0YGVjdbVchq5SQMEut2Do, tab "Strata Plan List"
   - Column A: Strata Plan (number)
   - Column B: Suburb 
-- Owner/s - populated from Google Sheets ID 143EspDcO0leMPNnUE_XJIs0YGVjdbVchq5SQMEut2Do, dynamic tabs labelled with the strata plan number
-  - 
+- Owner/s - populated from Google Sheets ID 143EspDcO0leMPNnUE_XJIs0YGVjdbVchq5SQMEut2Do, dynamic tabs labelled with the strata plan number 
   
 ## Page Outline
 - Strata Plan dropdown -  Strata Plans
