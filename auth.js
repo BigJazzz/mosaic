@@ -45,17 +45,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const username = document.cookie.split('; ').find(row => row.startsWith('username='))?.split('=')[1];
 
     if (token && username) {
-        console.log("Attempting auto-login with token.");
-        postToServer({ action: 'loginUser', username, token }).then(result => {
-            if (result.success) {
-                document.cookie = `authToken=${result.token};max-age=604800;path=/`; // Refresh token
-                sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
-                initializeApp(result.user);
-            } else {
-                // If token is invalid, clear cookies
-                handleLogout();
-            }
-        });
+        postToServer({ action: 'loginUser', username, token })
+            .then(result => {
+                if (result.success) {
+                    document.cookie = `authToken=${result.token};max-age=604800;path=/`; // Refresh token
+                    sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
+                    initializeApp(result.user);
+                } else {
+                    handleLogout();
+                }
+            })
+            .catch(error => {
+                console.error("Error during auto-login:", error);
+                // By catching the error here, we prevent the logout and can see the error in the console.
+            });
     }
 });
 
