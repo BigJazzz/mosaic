@@ -296,3 +296,68 @@ button:disabled {
 .proxy-checkbox-wrapper .checkbox-item {
     margin-bottom: 0;
 }
+
+/* --- Tab Styles --- */
+.tab-container {
+    overflow: hidden;
+    border: 1px solid #ccc;
+    background-color: #f1f1f1;
+    border-radius: 8px 8px 0 0;
+}
+
+.tab-container button {
+    background-color: inherit;
+    float: left;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    padding: 14px 16px;
+    transition: 0.3s;
+    color: #333;
+    width: auto; /* Override the default 100% width for buttons */
+}
+
+.tab-container button:hover {
+    background-color: #ddd;
+}
+
+.tab-container button.active {
+    background-color: #ccc;
+}
+
+.tab-content {
+    display: none;
+    padding: 20px 12px;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+}
+
+#sync-btn { 
+    width: auto;
+    display: block; /* To allow margin auto to work */
+    margin-left: auto; /* Aligns the button to the right */
+    margin-right: 0;
+    margin-top: 1rem; /* Add some space above the button */
+    margin-bottom: 1rem; /* Add some space below the button */
+}
+
+.report-date-selector {
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.report-date-selector label {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+#report-date {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 1rem;
+}
