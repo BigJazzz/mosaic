@@ -9,7 +9,7 @@ const adminPanel = document.getElementById('admin-panel');
 const addUserBtn = document.getElementById('add-user-btn');
 const changePasswordBtn = document.getElementById('change-password-btn');
 const logoutBtn = document.getElementById('logout-btn');
-const strataPlanWrapper = document.getElementById('strata-plan-wrapper');
+const strataPlanWrapper = document.getElementById('strata-plan-wrapper');F
 const userListBody = document.getElementById('user-list-body');
 const meetingTitle = document.getElementById('meeting-title');
 const meetingDate = document.getElementById('meeting-date');
@@ -509,7 +509,28 @@ document.addEventListener('DOMContentLoaded', () => {
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
     addUserBtn.addEventListener('click', handleAddUser);
-    userListBody.addEventListener('click', handleRemoveUser);
+    userListBody.addEventListener('change', (e) => {
+        if (e.target.classList.contains('user-actions-select')) {
+            const username = e.target.dataset.username;
+            const action = e.target.value;
+
+            switch(action) {
+                case 'change_sp':
+                    handleChangeSpAccess(username);
+                    break;
+                case 'reset_password':
+                    handleResetPassword(username);
+                    break;
+                case 'remove':
+                    // Create a temporary element to pass to the existing remove function
+                    const fakeButton = document.createElement('button');
+                    fakeButton.dataset.username = username;
+                    handleRemoveUser({ target: fakeButton });
+                    break;
+            }
+            e.target.value = ""; // Reset dropdown after action
+        }
+    });
     changePasswordBtn.addEventListener('click', handleChangePassword);
     changeMeetingTypeBtn.addEventListener('click', handleChangeMeetingType);
     
