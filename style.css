@@ -127,8 +127,10 @@ button:disabled {
 }
 
 #sync-btn { 
-    background-color: #6c757d; 
-    margin-top: 0.5rem; 
+    width: auto;
+    float: right; /* Use float to align right */
+    margin-top: -45px; /* Adjust vertical position to align with heading */
+    margin-bottom: 1rem;
 }
 
 #sync-btn:hover { 
