@@ -135,7 +135,16 @@ const syncSubmissions = async () => {
         if (error.message.includes("Authentication failed")) handleLogout();
     } finally {
         isSyncing = false;
-        await checkAndLoadMeeting(strataPlanSelect.value); 
+        // --- FIX STARTS HERE ---
+        // Refresh the initial data instead of re-checking for the meeting
+        const initialData = await postToServer({ action: 'getInitialData', sp: strataPlanSelect.value });
+        if (initialData && initialData.success) {
+            currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
+            currentTotalLots = initialData.totalLots;
+            cleanupQueuedSubmissions();
+            updateDisplay(strataPlanSelect.value);
+        }
+        // --- FIX ENDS HERE ---
         updateSyncButton();
     }
 };
@@ -364,7 +373,7 @@ const handleDelete = async (lotNumber) => {
 
 const handleEmailPdf = async () => {
     const sp = strataPlanSelect.value;
-    const reportDate = document.getElementById('report-date').value; // Get the selected date
+    const reportDate = document.getElementById('report-date').value;
 
     if (!sp) {
         showToast('Please select a Strata Plan first.', 'error');
@@ -377,12 +386,7 @@ const handleEmailPdf = async () => {
 
     const modalResponse = await showModal("Enter the email address to send the PDF report to:", { showInput: true, confirmText: 'Send Email' });
     if (modalResponse.confirmed && modalResponse.value) {
-        // ... (email validation logic remains the same) ...
-        
-        // Pass the selected date to the backend
-        const body = { action: 'emailPdfReport', sp, email: modalResponse.value, date: reportDate };
-        
-        // ... (rest of the fetch logic remains the same) ...
+        // ... (rest of the function remains the same)
     }
 };
 
@@ -559,24 +563,29 @@ function openTab(evt, tabName) {
 }
 
 const populateReportDates = async (sp) => {
-    const reportDateInput = document.getElementById('report-date');
-    reportDateInput.disabled = true;
-    reportDateInput.value = '';
+    const reportDateSelect = document.getElementById('report-date');
+    reportDateSelect.disabled = true;
+    reportDateSelect.innerHTML = '<option value="">No dates available</option>'; // Reset
 
     try {
         const result = await postToServer({ action: 'getReportDates', sp });
         if (result.success && result.dates.length > 0) {
             const availableDates = result.dates;
-            // Dates are YYYY-MM-DD format, sort them to find the latest
+            // Sort dates in reverse chronological order
             availableDates.sort((a, b) => new Date(b) - new Date(a));
             
-            const latestDate = availableDates[0];
-            const earliestDate = availableDates[availableDates.length - 1];
-
-            reportDateInput.min = earliestDate;
-            reportDateInput.max = latestDate;
-            reportDateInput.value = latestDate; // Default to the latest date
-            reportDateInput.disabled = false;
+            reportDateSelect.innerHTML = ''; // Clear the default option
+            availableDates.forEach(date => {
+                const option = document.createElement('option');
+                // The date is already YYYY-MM-DD, which is what we need
+                option.value = date; 
+                // Display the date in a more readable format (DD/MM/YYYY)
+                const parts = date.split('-');
+                option.textContent = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                reportDateSelect.appendChild(option);
+            });
+            
+            reportDateSelect.disabled = false;
         }
     } catch (error) {
         console.error('Failed to get report dates:', error);

@@ -117,6 +117,11 @@ button:disabled {
     cursor: not-allowed; 
 }
 
+#email-pdf-btn {
+    width: auto; /* Override default full-width */
+    margin-top: 0; /* Remove top margin */
+}
+
 #email-pdf-btn, #change-meeting-type-btn { 
     background-color: #17a2b8; 
     margin-top: 1rem; 
@@ -347,21 +352,21 @@ button:disabled {
 .report-date-selector {
     margin-top: 1.5rem;
     margin-bottom: 0.5rem;
+    display: flex; /* Add this */
+    align-items: flex-end; /* Add this to align items vertically */
+    gap: 0.5rem; /* Add this to create space between items */
 }
 
 .report-date-selector label {
     font-weight: bold;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0; /* Adjust margin */
     display: block;
+    flex-shrink: 0; /* Prevent label from shrinking */
 }
 
 #report-date {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-sizing: border-box;
-    font-size: 1rem;
+    width: auto; /* Allow input to size naturally */
+    flex-grow: 1; /* Allow input to fill available space */
 }
 
 .strata-plan-container {
