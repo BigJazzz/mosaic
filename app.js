@@ -313,7 +313,7 @@ const checkAndLoadMeeting = async (sp) => {
         updateDisplay(sp);
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'red';
-        if (error.message.includes("Authentication failed")) handleLogout();
+        // if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
