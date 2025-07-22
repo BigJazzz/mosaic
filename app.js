@@ -46,31 +46,30 @@ const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
 const initializeApp = (user) => {
     try {
-    loginSection.classList.add('hidden');
-    mainAppSection.classList.remove('hidden');
-    userDisplay.textContent = `${user.username} (${user.role})`;
+        loginSection.classList.add('hidden');
+        mainAppSection.classList.remove('hidden');
+        userDisplay.textContent = `${user.username} (${user.role})`;
 
-    if (user.role === 'Admin') {
-        adminPanel.classList.remove('hidden');
-        changeMeetingTypeBtn.classList.remove('hidden');
-        loadUsers();
-    }
-    
-    if (user.spAccess) {
-        strataPlanWrapper.classList.add('hidden');
-        populateStrataPlans().then(() => {
-            strataPlanSelect.value = user.spAccess;
-            handlePlanSelection(user.spAccess);
-        });
-    } else {
-        populateStrataPlans();
-    }
+        if (user.role === 'Admin') {
+            adminPanel.classList.remove('hidden');
+            changeMeetingTypeBtn.classList.remove('hidden');
+            loadUsers();
+        }
+        
+        if (user.spAccess) {
+            strataPlanWrapper.classList.add('hidden');
+            populateStrataPlans().then(() => {
+                strataPlanSelect.value = user.spAccess;
+                handlePlanSelection(user.spAccess);
+            });
+        } else {
+            populateStrataPlans();
+        }
 
-    updateSyncButton();
+        updateSyncButton();
     } catch (error) {
-        console.error("Error during app initialization:", error);
-        // Temporarily comment out the next line to see the error in the console
-        // handleLogout(); 
+        // This will catch the error and display it in the console without logging you out.
+        console.error("A critical error occurred during application startup:", error);
     }
 };
 
