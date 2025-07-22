@@ -1,6 +1,6 @@
 // --- Authentication & Session Logic ---
 const handleLogin = async (event) => {
-    if(event) event.preventDefault(); // Allow calling without an event
+    event.preventDefault();
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
     const loginStatus = document.getElementById('login-status');
@@ -16,11 +16,17 @@ const handleLogin = async (event) => {
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
         if (result.success) {
-            // Store token in a cookie that expires in 1 week
-            document.cookie = `authToken=${result.token};max-age=604800;path=/`;
-            document.cookie = `username=${result.user.username};max-age=604800;path=/`;
-            sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
-            initializeApp(result.user);
+            loginStatus.textContent = '';
+            // --- FIX STARTS HERE ---
+            // Construct the user object from the flat response
+            const user = { 
+                username: result.username, 
+                role: result.role, 
+                spAccess: result.spAccess 
+            };
+            // --- FIX ENDS HERE ---
+            sessionStorage.setItem('attendanceUser', JSON.stringify(user));
+            initializeApp(user);
         } else {
             throw new Error(result.error || 'Invalid username or password.');
         }
@@ -29,21 +35,6 @@ const handleLogin = async (event) => {
         loginStatus.style.color = 'red';
     }
 };
-
-document.addEventListener('DOMContentLoaded', () => {
-    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
-    const username = document.cookie.split('; ').find(row => row.startsWith('username='))?.split('=')[1];
-
-    if (token && username) {
-        postToServer({ action: 'loginUser', username, token }).then(result => {
-            if (result.success) {
-                document.cookie = `authToken=${result.token};max-age=604800;path=/`; // Refresh token
-                sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
-                initializeApp(result.user);
-            }
-        });
-    }
-});
 
 const handleLogout = () => {
     sessionStorage.removeItem('attendanceUser');
