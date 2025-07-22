@@ -403,8 +403,7 @@ const handleClearCache = async () => {
 const handleChangeMeetingType = async () => {
     const sp = strataPlanSelect.value;
     if (!sp) {
-        statusEl.textContent = "Please select a strata plan first.";
-        statusEl.style.color = 'red';
+        showToast("Please select a strata plan first.", 'error'); // Use showToast
         return;
     }
     const modalResponse = await showModal("Enter the new meeting type:", { showInput: true, confirmText: 'Change Type' });
@@ -413,15 +412,13 @@ const handleChangeMeetingType = async () => {
         try {
             const result = await postToServer({ action: 'changeMeetingType', sp, newMeetingType });
             if (result.success) {
-                statusEl.textContent = "Meeting type updated successfully.";
-                statusEl.style.color = 'green';
-                await checkAndLoadMeeting(sp); // Refresh to show changes
+                showToast("Meeting type updated successfully.", 'success'); // Use showToast
+                await checkAndLoadMeeting(sp);
             } else {
                 throw new Error(result.error);
             }
         } catch (error) {
-            statusEl.textContent = `Error: ${error.message}`;
-            statusEl.style.color = 'red';
+            showToast(`Error: ${error.message}`, 'error'); // Use showToast
             if (error.message.includes("Authentication failed")) handleLogout();
         }
     }
