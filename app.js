@@ -234,9 +234,29 @@ const checkAndLoadMeeting = async (sp) => {
         if (columnCheck.columnsExist) {
             initialData = await postToServer({ action: 'getInitialData', sp });
         } else {
-            const modalResponse = await showModal("Today's meeting has not been set up. Please enter the meeting type (e.g., AGM, EGM, SCM):", { showInput: true, confirmText: 'Set Up Meeting' });
-            if (modalResponse.confirmed && modalResponse.value) {
-                initialData = await postToServer({ action: 'createAndFetchInitialData', sp, meetingType: modalResponse.value });
+            const meetingTypeRes = await showModal("Today's meeting has not been set up. Please enter the meeting type (e.g., AGM, EGM):", { showInput: true, confirmText: 'Next' });
+            if (meetingTypeRes.confirmed && meetingTypeRes.value) {
+                const meetingType = meetingTypeRes.value;
+                let financialLots = null;
+
+                // Only ask for financial lots if the meeting is NOT an SCM
+                if (meetingType.toUpperCase() !== 'SCM') {
+                    const financialLotsRes = await showModal("Enter the Number of Financial Lots:", { showInput: true, inputType: 'number', confirmText: 'Set Up Meeting' });
+                    if (financialLotsRes.confirmed && financialLotsRes.value) {
+                        financialLots = financialLotsRes.value;
+                    } else {
+                         resetUiOnPlanChange();
+                         return;
+                    }
+                }
+                
+                initialData = await postToServer({ 
+                    action: 'createAndFetchInitialData', 
+                    sp, 
+                    meetingType,
+                    financialLots // Will be null for SCM, or a number for others
+                });
+
             } else {
                 resetUiOnPlanChange();
                 return;
@@ -253,12 +273,9 @@ const checkAndLoadMeeting = async (sp) => {
                 meetingTitle.textContent = `Attendance Form - ${initialData.meetingType}`;
                 meetingDate.textContent = new Date().toLocaleDateString("en-AU", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             }
+            
+            financialLabel.lastChild.nodeValue = " Is Financial?";
 
-            if (initialData.meetingType && initialData.meetingType.toUpperCase() === 'SCM') {
-                financialLabel.lastChild.nodeValue = " Is Committee Member?";
-            } else {
-                financialLabel.lastChild.nodeValue = " Is Financial?";
-            }
         } else {
             throw new Error(initialData ? initialData.error : "Failed to get initial data.");
         }
