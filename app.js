@@ -467,7 +467,11 @@ const handleFormSubmit = async (event) => {
     const selectedSP = strataPlanSelect.value;
     form.reset();
     strataPlanSelect.value = selectedSP;
-
+    
+    // Manually reset the UI elements to their default state
+    checkboxContainer.style.display = 'block';
+    ownerLabel.style.display = 'block';
+    
     companyRepGroup.style.display = 'none';
     proxyHolderGroup.style.display = 'none';
     checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
