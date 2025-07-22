@@ -364,7 +364,7 @@ const handleDelete = async (lotNumber) => {
 
 const handleEmailPdf = async () => {
     const sp = strataPlanSelect.value;
-    const reportDate = document.getElementById('report-date').value; // Get the selected date
+    const reportDate = document.getElementById('report-date').value;
 
     if (!sp) {
         showToast('Please select a Strata Plan first.', 'error');
@@ -377,12 +377,7 @@ const handleEmailPdf = async () => {
 
     const modalResponse = await showModal("Enter the email address to send the PDF report to:", { showInput: true, confirmText: 'Send Email' });
     if (modalResponse.confirmed && modalResponse.value) {
-        // ... (email validation logic remains the same) ...
-        
-        // Pass the selected date to the backend
-        const body = { action: 'emailPdfReport', sp, email: modalResponse.value, date: reportDate };
-        
-        // ... (rest of the fetch logic remains the same) ...
+        // ... (rest of the function remains the same)
     }
 };
 
