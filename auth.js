@@ -1,32 +1,35 @@
 // --- Authentication & Session Logic ---
 const handleLogin = async (event) => {
-    event.preventDefault();
+    if(event) event.preventDefault(); // Allow calling without an event
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
     const loginStatus = document.getElementById('login-status');
     
-    if (!username || !password) {
-        loginStatus.textContent = 'Username and password are required.';
+    if (!username) {
+        loginStatus.textContent = 'Username is required.';
         loginStatus.style.color = 'red';
         return;
     }
+    // Password can be blank for first login after reset, so no check here.
     loginStatus.textContent = 'Logging in...';
     loginStatus.style.color = 'blue';
 
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
         if (result.success) {
-            loginStatus.textContent = '';
-            // --- FIX STARTS HERE ---
-            // Construct the user object from the flat response
-            const user = { 
-                username: result.username, 
-                role: result.role, 
-                spAccess: result.spAccess 
-            };
-            // --- FIX ENDS HERE ---
-            sessionStorage.setItem('attendanceUser', JSON.stringify(user));
-            initializeApp(user);
+            // Store token in a cookie that expires in 1 week
+            document.cookie = `authToken=${result.token};max-age=604800;path=/`;
+            document.cookie = `username=${result.user.username};max-age=604800;path=/`;
+            sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
+            
+            if (result.resetRequired) {
+                loginStatus.textContent = '';
+                await showModal('This is your first login. Please set a new password.', { cancelText: 'OK', isHtml: true });
+                await handleChangePassword();
+                location.reload();
+            } else {
+                 initializeApp(result.user);
+            }
         } else {
             throw new Error(result.error || 'Invalid username or password.');
         }
@@ -36,11 +39,33 @@ const handleLogin = async (event) => {
     }
 };
 
+// Auto-login check on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
+    const username = document.cookie.split('; ').find(row => row.startsWith('username='))?.split('=')[1];
+
+    if (token && username) {
+        console.log("Attempting auto-login with token.");
+        postToServer({ action: 'loginUser', username, token }).then(result => {
+            if (result.success) {
+                document.cookie = `authToken=${result.token};max-age=604800;path=/`; // Refresh token
+                sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
+                initializeApp(result.user);
+            } else {
+                // If token is invalid, clear cookies
+                handleLogout();
+            }
+        });
+    }
+});
+
 const handleLogout = () => {
     sessionStorage.removeItem('attendanceUser');
+    // Expire the cookies by setting max-age to 0
+    document.cookie = 'authToken=; max-age=0; path=/;';
+    document.cookie = 'username=; max-age=0; path=/;';
     location.reload();
 };
-
 // --- User Management (Admin) ---
 const loadUsers = async () => {
     try {
