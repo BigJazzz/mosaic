@@ -469,10 +469,16 @@ const handleFormSubmit = async (event) => {
         }
         if (selectedNames.length === 0) { statusEl.textContent = 'Please select at least one owner.'; statusEl.style.color = 'red'; return; }
     }
+
+    // --- FIX STARTS HERE ---
+    const submissionDate = new Date().toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
     const submission = {
         submissionId: `sub_${Date.now()}_${Math.random()}`,
+        submissionDate: submissionDate, // Add the creation date
         sp, lot, names: selectedNames, financial: isFinancial, proxyHolderLot, companyRep
     };
+    // --- FIX ENDS HERE ---
+
     const queue = getSubmissionQueue();
     queue.push(submission);
     saveSubmissionQueue(queue);
@@ -485,6 +491,8 @@ const handleFormSubmit = async (event) => {
     form.reset();
     strataPlanSelect.value = selectedSP;
 
+    checkboxContainer.style.display = 'block';
+    ownerLabel.style.display = 'block';
     companyRepGroup.style.display = 'none';
     proxyHolderGroup.style.display = 'none';
     checkboxContainer.innerHTML = '<p>Enter a Lot Number.</p>';
