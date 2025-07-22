@@ -559,24 +559,29 @@ function openTab(evt, tabName) {
 }
 
 const populateReportDates = async (sp) => {
-    const reportDateInput = document.getElementById('report-date');
-    reportDateInput.disabled = true;
-    reportDateInput.value = '';
+    const reportDateSelect = document.getElementById('report-date');
+    reportDateSelect.disabled = true;
+    reportDateSelect.innerHTML = '<option value="">No dates available</option>'; // Reset
 
     try {
         const result = await postToServer({ action: 'getReportDates', sp });
         if (result.success && result.dates.length > 0) {
             const availableDates = result.dates;
-            // Dates are YYYY-MM-DD format, sort them to find the latest
+            // Sort dates in reverse chronological order
             availableDates.sort((a, b) => new Date(b) - new Date(a));
             
-            const latestDate = availableDates[0];
-            const earliestDate = availableDates[availableDates.length - 1];
-
-            reportDateInput.min = earliestDate;
-            reportDateInput.max = latestDate;
-            reportDateInput.value = latestDate; // Default to the latest date
-            reportDateInput.disabled = false;
+            reportDateSelect.innerHTML = ''; // Clear the default option
+            availableDates.forEach(date => {
+                const option = document.createElement('option');
+                // The date is already YYYY-MM-DD, which is what we need
+                option.value = date; 
+                // Display the date in a more readable format (DD/MM/YYYY)
+                const parts = date.split('-');
+                option.textContent = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                reportDateSelect.appendChild(option);
+            });
+            
+            reportDateSelect.disabled = false;
         }
     } catch (error) {
         console.error('Failed to get report dates:', error);
