@@ -98,7 +98,20 @@
                         </thead>
                         <tbody id="attendee-table-body"></tbody>
                     </table>
-                     <button type="button" id="email-pdf-btn">Email PDF Report</button>
+                    <div class="attendee-section">
+                        <h2>Current Attendees <span id="person-count"></span></h2>
+                        <button type="button" id="sync-btn" disabled>Sync Submissions</button>
+                        <table class="attendee-table">
+                            </table>
+                    
+                        <div class="report-date-selector">
+                            <label for="report-date">Select Report Date</label>
+                            <input type="date" id="report-date" disabled>
+                        </div>
+                    
+                         <button type="button" id="email-pdf-btn">Email PDF Report</button>
+                    </div>
+                    <button type="button" id="email-pdf-btn">Email PDF Report</button>
                 </div>
             </div>
 
