@@ -12,7 +12,7 @@ const updateDisplay = (sp) => {
 const resetUiOnPlanChange = () => {
     currentSyncedAttendees = [];
     currentTotalLots = 0;
-    document.getElementById('attendee-table-body').innerHTML = `<tr><td colspan="4" style="text-align:center;">Select a plan to see attendees.</td></tr>`;
+    document.getElementById('attendee-table-body').innerHTML = `<tr><td colspan="5" style="text-align:center;">Select a plan to see attendees.</td></tr>`;
     document.getElementById('person-count').textContent = `(0 people)`;
     document.getElementById('quorum-display').innerHTML = `Quorum: ...%`;
     document.getElementById('quorum-display').style.backgroundColor = '#6c757d';

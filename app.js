@@ -9,7 +9,7 @@ const adminPanel = document.getElementById('admin-panel');
 const addUserBtn = document.getElementById('add-user-btn');
 const changePasswordBtn = document.getElementById('change-password-btn');
 const logoutBtn = document.getElementById('logout-btn');
-const strataPlanWrapper = document.getElementById('strata-plan-wrapper');
+const strataPlanWrapper = document.getElementById('strata-plan-wrapper');F
 const userListBody = document.getElementById('user-list-body');
 const meetingTitle = document.getElementById('meeting-title');
 const meetingDate = document.getElementById('meeting-date');
@@ -248,9 +248,17 @@ const checkAndLoadMeeting = async (sp) => {
             if (meetingTypeRes.confirmed && meetingTypeRes.value) {
                 const meetingType = meetingTypeRes.value;
                 let financialLots = null;
+                let committeeMembers = null;
 
-                // Only ask for financial lots if the meeting is NOT an SCM
-                if (meetingType.toUpperCase() !== 'SCM') {
+                if (meetingType.toUpperCase() === 'SCM') {
+                    const committeeMembersRes = await showModal("Enter the Number of Committee Members:", { showInput: true, inputType: 'number', confirmText: 'Set Up Meeting' });
+                    if (committeeMembersRes.confirmed && committeeMembersRes.value) {
+                        financialLots = committeeMembersRes.value; // Use the same variable to pass the count
+                    } else {
+                         resetUiOnPlanChange();
+                         return;
+                    }
+                } else {
                     const financialLotsRes = await showModal("Enter the Number of Financial Lots:", { showInput: true, inputType: 'number', confirmText: 'Set Up Meeting' });
                     if (financialLotsRes.confirmed && financialLotsRes.value) {
                         financialLots = financialLotsRes.value;
@@ -264,7 +272,7 @@ const checkAndLoadMeeting = async (sp) => {
                     action: 'createAndFetchInitialData', 
                     sp, 
                     meetingType,
-                    financialLots // Will be null for SCM, or a number for others
+                    financialLots
                 });
 
             } else {
@@ -282,10 +290,13 @@ const checkAndLoadMeeting = async (sp) => {
             if (initialData.meetingType) {
                 meetingTitle.textContent = `Attendance Form - ${initialData.meetingType}`;
                 meetingDate.textContent = new Date().toLocaleDateString("en-AU", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                
+                if (initialData.meetingType.toUpperCase() === 'SCM') {
+                    financialLabel.lastChild.nodeValue = " Is Committee Member?";
+                } else {
+                    financialLabel.lastChild.nodeValue = " Is Financial?";
+                }
             }
-            
-            financialLabel.lastChild.nodeValue = " Is Financial?";
-
         } else {
             throw new Error(initialData ? initialData.error : "Failed to get initial data.");
         }
@@ -498,7 +509,28 @@ document.addEventListener('DOMContentLoaded', () => {
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
     addUserBtn.addEventListener('click', handleAddUser);
-    userListBody.addEventListener('click', handleRemoveUser);
+    userListBody.addEventListener('change', (e) => {
+        if (e.target.classList.contains('user-actions-select')) {
+            const username = e.target.dataset.username;
+            const action = e.target.value;
+
+            switch(action) {
+                case 'change_sp':
+                    handleChangeSpAccess(username);
+                    break;
+                case 'reset_password':
+                    handleResetPassword(username);
+                    break;
+                case 'remove':
+                    // Create a temporary element to pass to the existing remove function
+                    const fakeButton = document.createElement('button');
+                    fakeButton.dataset.username = username;
+                    handleRemoveUser({ target: fakeButton });
+                    break;
+            }
+            e.target.value = ""; // Reset dropdown after action
+        }
+    });
     changePasswordBtn.addEventListener('click', handleChangePassword);
     changeMeetingTypeBtn.addEventListener('click', handleChangeMeetingType);
     
