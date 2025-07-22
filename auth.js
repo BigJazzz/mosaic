@@ -1,6 +1,6 @@
 // --- Authentication & Session Logic ---
 const handleLogin = async (event) => {
-    event.preventDefault();
+    if(event) event.preventDefault(); // Allow calling without an event
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
     const loginStatus = document.getElementById('login-status');
@@ -16,10 +16,11 @@ const handleLogin = async (event) => {
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
         if (result.success) {
-            loginStatus.textContent = '';
-            const user = { username: result.username, role: result.role, spAccess: result.spAccess };
-            sessionStorage.setItem('attendanceUser', JSON.stringify(user));
-            initializeApp(user);
+            // Store token in a cookie that expires in 1 week
+            document.cookie = `authToken=${result.token};max-age=604800;path=/`;
+            document.cookie = `username=${result.user.username};max-age=604800;path=/`;
+            sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
+            initializeApp(result.user);
         } else {
             throw new Error(result.error || 'Invalid username or password.');
         }
@@ -28,6 +29,21 @@ const handleLogin = async (event) => {
         loginStatus.style.color = 'red';
     }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
+    const username = document.cookie.split('; ').find(row => row.startsWith('username='))?.split('=')[1];
+
+    if (token && username) {
+        postToServer({ action: 'loginUser', username, token }).then(result => {
+            if (result.success) {
+                document.cookie = `authToken=${result.token};max-age=604800;path=/`; // Refresh token
+                sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
+                initializeApp(result.user);
+            }
+        });
+    }
+});
 
 const handleLogout = () => {
     sessionStorage.removeItem('attendanceUser');
@@ -73,15 +89,21 @@ const handleAddUser = async () => {
 
     const roleRes = await showModal("Enter role (Admin or User):", { showInput: true, confirmText: 'Next' });
     if (!roleRes.confirmed || !roleRes.value) return;
-    
-    const spAccessRes = await showModal("Enter SP Access number (or leave blank for all):", { showInput: true, confirmText: 'Add User' });
-    if (!spAccessRes.confirmed) return;
 
     const role = roleRes.value.trim();
     if (role !== 'Admin' && role !== 'User') {
-        document.getElementById('status').textContent = 'Invalid role. Must be "Admin" or "User".';
-        document.getElementById('status').style.color = 'red';
+        showToast('Invalid role. Must be "Admin" or "User".', 'error');
         return;
+    }
+
+    let spAccess = '';
+    if (role === 'User') {
+        const spAccessRes = await showModal("Enter SP Access number for this user:", { showInput: true, confirmText: 'Add User' });
+        if (!spAccessRes.confirmed || !spAccessRes.value) {
+            showToast('SP Access is required for the User role.', 'error');
+            return;
+        }
+        spAccess = spAccessRes.value;
     }
 
     try {
@@ -90,18 +112,16 @@ const handleAddUser = async () => {
             username: usernameRes.value, 
             password: passwordRes.value, 
             role,
-            spAccess: spAccessRes.value 
+            spAccess
         });
         if (result.success) {
-            document.getElementById('status').textContent = 'User added successfully.';
-            document.getElementById('status').style.color = 'green';
+            showToast('User added successfully.', 'success');
             loadUsers();
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        document.getElementById('status').textContent = `Failed to add user: ${error.message}`;
-        document.getElementById('status').style.color = 'red';
+        showToast(`Failed to add user: ${error.message}`, 'error');
         if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
@@ -132,7 +152,13 @@ const handleRemoveUser = async (e) => {
 // --- User Management (Self) ---
 const handleChangePassword = async () => {
     const passwordRes = await showModal("Enter your new password:", { showInput: true, inputType: 'password', confirmText: 'Change Password' });
-    if (!passwordRes.confirmed || !passwordRes.value) return;
+    if (!passwordRes.confirmed) return;
+    
+    // Prevent user from setting a blank password
+    if (!passwordRes.value) {
+        showToast('Password cannot be blank.', 'error');
+        return;
+    }
 
     try {
         const result = await postToServer({ action: 'changePassword', newPassword: passwordRes.value });
