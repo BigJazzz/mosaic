@@ -80,13 +80,24 @@ const loadUsers = async () => {
         result.users.forEach(user => {
             const tr = document.createElement('tr');
             const isCurrentUser = user.username === sessionUser.username;
-            const removeButtonHtml = isCurrentUser ? '' : `<button class="delete-btn" data-username="${user.username}">Remove</button>`;
+            
+            // Create the dropdown menu for actions
+            let actionsHtml = `
+                <select class="user-actions-select" data-username="${user.username}">
+                    <option value="">Select Action</option>
+                    <option value="change_sp">Change SP Access</option>
+                    <option value="reset_password">Reset Password</option>
+            `;
+            if (!isCurrentUser) {
+                actionsHtml += `<option value="remove">Remove User</option>`;
+            }
+            actionsHtml += `</select>`;
             
             tr.innerHTML = `
                 <td>${user.username}</td>
                 <td>${user.role}</td>
                 <td>${user.spAccess || 'All'}</td>
-                <td>${removeButtonHtml}</td>
+                <td>${actionsHtml}</td>
             `;
             userListBody.appendChild(tr);
         });
@@ -182,6 +193,41 @@ const handleChangePassword = async () => {
         }
     } catch (error) {
         showToast(`Failed to change password: ${error.message}`, 'error'); // Use showToast
+        if (error.message.includes("Authentication failed")) handleLogout();
+    }
+};
+
+const handleChangeSpAccess = async (username) => {
+    const spAccessRes = await showModal(`Enter new SP Access for ${username} (or leave blank for all):`, { showInput: true, confirmText: 'Update' });
+    if (!spAccessRes.confirmed) return;
+
+    try {
+        const result = await postToServer({ action: 'changeSpAccess', username, spAccess: spAccessRes.value });
+        if (result.success) {
+            showToast('SP Access updated successfully.', 'success');
+            loadUsers();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        showToast(`Failed to update SP Access: ${error.message}`, 'error');
+        if (error.message.includes("Authentication failed")) handleLogout();
+    }
+};
+
+const handleResetPassword = async (username) => {
+    const confirmRes = await showModal(`Are you sure you want to reset the password for ${username}?`, { confirmText: 'Yes, Reset' });
+    if (!confirmRes.confirmed) return;
+
+    try {
+        const result = await postToServer({ action: 'resetPassword', username });
+        if (result.success) {
+            showToast('Password reset successfully.', 'success');
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        showToast(`Failed to reset password: ${error.message}`, 'error');
         if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
