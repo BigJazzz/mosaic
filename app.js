@@ -45,6 +45,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
 const initializeApp = (user) => {
+    try {
     loginSection.classList.add('hidden');
     mainAppSection.classList.remove('hidden');
     userDisplay.textContent = `${user.username} (${user.role})`;
@@ -66,6 +67,11 @@ const initializeApp = (user) => {
     }
 
     updateSyncButton();
+    } catch (error) {
+        console.error("Error during app initialization:", error);
+        // Temporarily comment out the next line to see the error in the console
+        // handleLogout(); 
+    }
 };
 
 const handlePlanSelection = async (sp) => {
