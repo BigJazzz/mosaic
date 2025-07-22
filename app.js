@@ -135,7 +135,16 @@ const syncSubmissions = async () => {
         if (error.message.includes("Authentication failed")) handleLogout();
     } finally {
         isSyncing = false;
-        await checkAndLoadMeeting(strataPlanSelect.value); 
+        // --- FIX STARTS HERE ---
+        // Refresh the initial data instead of re-checking for the meeting
+        const initialData = await postToServer({ action: 'getInitialData', sp: strataPlanSelect.value });
+        if (initialData && initialData.success) {
+            currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
+            currentTotalLots = initialData.totalLots;
+            cleanupQueuedSubmissions();
+            updateDisplay(strataPlanSelect.value);
+        }
+        // --- FIX ENDS HERE ---
         updateSyncButton();
     }
 };
