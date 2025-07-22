@@ -1,4 +1,4 @@
-// --- UI & Rendering ---
+ // --- UI & Rendering ---
 const updateDisplay = (sp) => {
     if (!sp) return;
     const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
@@ -98,6 +98,11 @@ const renderAttendeeTable = (attendees) => {
 const updateQuorumDisplay = (count = 0, total = 0) => {
     const quorumDisplay = document.getElementById('quorum-display');
     const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
-    quorumDisplay.innerHTML = `Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
-    quorumDisplay.style.backgroundColor = percentage >= 25 ? '#28a745' : '#dc3545';
+    
+    // Calculate the number of lots required for quorum, rounded up.
+    const quorumThreshold = Math.ceil(total * 0.25);
+    const isQuorumMet = count >= quorumThreshold;
+
+    quorumDisplay.innerHTML = `Financial Lots Quorum: ${percentage}%<br><small>(${count}/${total})</small>`;
+    quorumDisplay.style.backgroundColor = isQuorumMet ? '#28a745' : '#dc3545';
 };
