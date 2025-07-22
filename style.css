@@ -361,3 +361,16 @@ button:disabled {
     box-sizing: border-box;
     font-size: 1rem;
 }
+
+.strata-plan-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Adds a small space between the dropdown and the button */
+}
+
+/* Override default button width and margin for this specific button */
+#change-meeting-type-btn {
+    width: auto;
+    margin-top: 0;
+    flex-shrink: 0; /* Prevent the button from shrinking if space is tight */
+}
