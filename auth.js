@@ -127,15 +127,13 @@ const handleRemoveUser = async (e) => {
     try {
         const result = await postToServer({ action: 'removeUser', username });
         if (result.success) {
-            document.getElementById('status').textContent = 'User removed successfully.';
-            document.getElementById('status').style.color = 'green';
+            showToast('User removed successfully.', 'success'); // Use showToast
             loadUsers();
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        document.getElementById('status').textContent = `Failed to remove user: ${error.message}`;
-        document.getElementById('status').style.color = 'red';
+        showToast(`Failed to remove user: ${error.message}`, 'error'); // Use showToast
         if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
@@ -145,7 +143,6 @@ const handleChangePassword = async () => {
     const passwordRes = await showModal("Enter your new password:", { showInput: true, inputType: 'password', confirmText: 'Change Password' });
     if (!passwordRes.confirmed) return;
     
-    // Prevent user from setting a blank password
     if (!passwordRes.value) {
         showToast('Password cannot be blank.', 'error');
         return;
@@ -154,14 +151,12 @@ const handleChangePassword = async () => {
     try {
         const result = await postToServer({ action: 'changePassword', newPassword: passwordRes.value });
         if (result.success) {
-            document.getElementById('status').textContent = 'Password changed successfully.';
-            document.getElementById('status').style.color = 'green';
+            showToast('Password changed successfully.', 'success'); // Use showToast
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        document.getElementById('status').textContent = `Failed to change password: ${error.message}`;
-        document.getElementById('status').style.color = 'red';
+        showToast(`Failed to change password: ${error.message}`, 'error'); // Use showToast
         if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
