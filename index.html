@@ -53,7 +53,7 @@
                             <button type="button" id="change-meeting-type-btn" class="hidden">Change Meeting Type</button>
                         </div>
                     </div>
-                   
+                    
                     <div class="form-group form-group-inline">
                         <div class="lot-number-wrapper">
                             <label for="lot-number">Lot Number</label>
@@ -101,19 +101,12 @@
                         </thead>
                         <tbody id="attendee-table-body"></tbody>
                     </table>
-                    <div class="attendee-section">
-                        <h2>Current Attendees <span id="person-count"></span></h2>
-                        <button type="button" id="sync-btn" disabled>Sync Submissions</button>
-                        <table class="attendee-table">
-                            </table>
-                    
-                        <div class="report-date-selector">
-                            <label for="report-date">Select Report Date</label>
-                            <input type="date" id="report-date" disabled>
-                        </div>
-                    
-                         <button type="button" id="email-pdf-btn">Email PDF Report</button>
+                
+                    <div class="report-date-selector">
+                        <label for="report-date">Select Report Date</label>
+                        <input type="date" id="report-date" disabled>
                     </div>
+                
                     <button type="button" id="email-pdf-btn">Email PDF Report</button>
                 </div>
             </div>
@@ -140,10 +133,9 @@
                         <button type="button" id="add-user-btn" style="background-color: #28a745; margin-top: 1rem;">Add New User</button>
                     </div>
                 </div>
+                <button type="button" id="clear-cache-btn">Clear Entire Cache</button>
+                <button type="button" id="logout-btn">Logout</button>
             </div>
-            
-            <button type="button" id="clear-cache-btn">Clear Entire Cache</button>
-            <button type="button" id="logout-btn">Logout</button>
         </div>
     </div>
 
