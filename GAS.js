@@ -1,11 +1,86 @@
 // --- CONFIGURATION ---
-const SCRIPT_VERSION = "v24_Change_Meeting_Type"; 
+const SCRIPT_VERSION = "v26_Internal_Token_Auth";
 const SOURCE_DATA_SHEET_ID = '143EspDcO0leMPNnUE_XJIs0YGVjdbVchq5SQMEut2Do';
 const DESTINATION_SHEET_ID = '15q4fAjDO1U_cSWEGuIdhYn2LZNkcafEYpo6zIYlRRUQ';
 const TEMPLATE_SHEET_NAME = 'Attendance Template';
 const USERS_SHEET_NAME = 'Users';
 
-// --- MAIN HANDLERS ---
+// Get the secret key from script properties
+const JWT_SECRET = PropertiesService.getScriptProperties().getProperty('JWT_SECRET');
+
+// NEW: Add a check to ensure the secret key exists.
+if (!JWT_SECRET) {
+  throw new Error("CRITICAL_ERROR: 'JWT_SECRET' is not set in your Script Properties. Please go to Project Settings > Script Properties and add it.");
+}
+
+
+// --- LIBRARY-FREE TOKEN HELPER FUNCTIONS ---
+
+function base64UrlEncode(text) {
+  return Utilities.base64Encode(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlDecode(encodedText) {
+  while (encodedText.length % 4) {
+    encodedText += '=';
+  }
+  encodedText = encodedText.replace(/-/g, '+').replace(/_/g, '/');
+  return Utilities.newBlob(Utilities.base64Decode(encodedText)).getDataAsString();
+}
+
+function createToken(userPayload) {
+  const header = { "alg": "HS256", "typ": "JWT" };
+  const claims = {
+    'iss': 'StrataAttendanceApp',
+    'sub': userPayload.username,
+    'iat': Math.floor(Date.now() / 1000),
+    'exp': Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7), // Expires in 7 days
+    'user': userPayload
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedClaims = base64UrlEncode(JSON.stringify(claims));
+  
+  const signatureInput = `${encodedHeader}.${encodedClaims}`;
+  const signatureBytes = Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_256, signatureInput, JWT_SECRET);
+  const encodedSignature = base64UrlEncode(signatureBytes);
+
+  return `${signatureInput}.${encodedSignature}`;
+}
+
+function verifyAndDecodeToken(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3) { throw new Error("Invalid token format."); }
+
+  const [encodedHeader, encodedClaims, encodedSignature] = parts;
+  const signatureInput = `${encodedHeader}.${encodedClaims}`;
+  
+  const expectedSignatureBytes = Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_256, signatureInput, JWT_SECRET);
+  const expectedSignature = base64UrlEncode(expectedSignatureBytes);
+
+  if (encodedSignature !== expectedSignature) { throw new Error("Token signature validation failed."); }
+  
+  const claims = JSON.parse(base64UrlDecode(encodedClaims));
+  if (claims.exp < Math.floor(Date.now() / 1000)) { throw new Error("Token has expired."); }
+  
+  return claims;
+}
+
+function getAuthenticatedUser(headers) {
+    const authHeader = headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) { return null; }
+    const token = authHeader.substring(7); // Remove "Bearer "
+    try {
+        const decoded = verifyAndDecodeToken(token);
+        return decoded.user; // Return the user payload from the token
+    } catch (e) {
+        console.error("Token verification failed:", e.toString());
+        return null;
+    }
+}
+
+
+// --- MAIN HANDLER ---
 function doPost(e) {
   let requestData;
   try {
@@ -13,12 +88,12 @@ function doPost(e) {
     const action = requestData.action;
 
     if (action === 'loginUser') {
-      return handleLogin(requestData.username, requestData.password, requestData.token);
+      return handleLogin(requestData.username, requestData.password);
     }
 
-    const user = requestData.user;
-    if (!user || !verifyUser(user.username, user.token)) {
-      throw new Error("Authentication failed. Please log in again.");
+    const user = getAuthenticatedUser(e.requestHeaders);
+    if (!user) {
+      throw new Error("Authentication failed. Invalid or expired token.");
     }
     
     switch(action) {
@@ -32,10 +107,6 @@ function doPost(e) {
         return handleChangePassword(user, requestData.newPassword);
       case 'changeMeetingType':
         return handleChangeMeetingType(user, findSheet(requestData.sp), requestData.newMeetingType);
-      case 'changeSpAccess':
-        return handleChangeSpAccess(user, requestData.username, requestData.spAccess);
-      case 'resetPassword':
-        return handleResetPassword(user, requestData.username);
       
       case 'getStrataPlans':
         return handleGetStrataPlans();
@@ -46,15 +117,13 @@ function doPost(e) {
       case 'checkTodaysColumns':
         return handleCheckTodaysColumns(findSheet(requestData.sp));
       case 'createAndFetchInitialData':
-        return handleCreateAndFetchInitialData(findSheet(requestData.sp), requestData.meetingType, requestData.financialLots);
+        return handleCreateAndFetchInitialData(findSheet(requestData.sp), requestData.meetingType);
       case 'getInitialData':
         return handleGetInitialData(findSheet(requestData.sp));
       case 'delete':
         return handleDelete(findSheet(requestData.sp), requestData.lot);
-      case 'getReportDates':
-        return handleGetReportDates(requestData.sp);
       case 'emailPdfReport':
-        return handleEmailPdfReport(requestData.sp, findSheet(requestData.sp), requestData.email, requestData.date);
+        return handleEmailPdfReport(requestData.sp, findSheet(requestData.sp), requestData.email);
       default:
         throw new Error(`Invalid 'action' parameter provided: ${action}`);
     }
@@ -65,75 +134,32 @@ function doPost(e) {
 }
 
 // --- AUTHENTICATION & USER MANAGEMENT ---
-function generateAuthToken() {
-  return Utilities.getUuid();
-}
-
 function hashPassword(password) {
-  if (!password) return '';
   const hash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password);
   return hash.map(byte => ('0' + (byte & 0xFF).toString(16)).slice(-2)).join('');
 }
 
-function handleLogin(username, password, token) {
+function handleLogin(username, password) {
   const usersSheet = SpreadsheetApp.openById(SOURCE_DATA_SHEET_ID).getSheetByName(USERS_SHEET_NAME);
-  const usersData = usersSheet.getRange(2, 1, usersSheet.getLastRow() - 1, 5).getValues();
+  const users = usersSheet.getDataRange().getValues();
+  const passwordHash = hashPassword(password);
   
-  for (let i = 0; i < usersData.length; i++) {
-    const userRow = usersData[i];
-    const storedUsername = userRow[0];
-    
-    if (storedUsername.toLowerCase() === username.toLowerCase()) {
-      const storedPasswordHash = userRow[1];
-      const storedRole = userRow[2];
-      const storedSpAccess = userRow[3] || null;
-      let storedToken = userRow[4];
-      const userRowIndex = i + 2;
-
-      if (token && storedToken === token) {
-        const newToken = generateAuthToken();
-        usersSheet.getRange(userRowIndex, 5).setValue(newToken);
-        return ContentService.createTextOutput(JSON.stringify({ 
-          success: true, 
-          token: newToken,
-          user: { username: storedUsername, role: storedRole, spAccess: storedSpAccess }
-        })).setMimeType(ContentService.MimeType.JSON);
-      }
-      
-      if (password !== undefined) {
-        if (storedPasswordHash === '' && password === '') {
-           return ContentService.createTextOutput(JSON.stringify({ 
-            success: true, 
-            resetRequired: true,
-            token: storedToken,
-            user: { username: storedUsername, role: storedRole, spAccess: storedSpAccess }
-          })).setMimeType(ContentService.MimeType.JSON);
-        }
-
-        const submittedPasswordHash = hashPassword(password);
-        if (storedPasswordHash === submittedPasswordHash) {
-          const newToken = generateAuthToken();
-          usersSheet.getRange(userRowIndex, 5).setValue(newToken);
-          return ContentService.createTextOutput(JSON.stringify({ 
-            success: true, 
-            resetRequired: false,
-            token: newToken,
-            user: { username: storedUsername, role: storedRole, spAccess: storedSpAccess }
-          })).setMimeType(ContentService.MimeType.JSON);
-        }
-      }
+  for (let i = 1; i < users.length; i++) {
+    if (users[i][0] === username && users[i][1] === passwordHash) {
+      const userPayload = { 
+        username: users[i][0], 
+        role: users[i][2],
+        spAccess: users[i][3] || null
+      };
+      const token = createToken(userPayload);
+      return ContentService.createTextOutput(JSON.stringify({ 
+        success: true, 
+        token: token,
+        user: userPayload
+      })).setMimeType(ContentService.MimeType.JSON);
     }
   }
-  throw new Error("Invalid credentials.");
-}
-
-function verifyUser(username, token) {
-  const usersSheet = SpreadsheetApp.openById(SOURCE_DATA_SHEET_ID).getSheetByName(USERS_SHEET_NAME);
-  const usersData = usersSheet.getRange(2, 1, usersSheet.getLastRow() - 1, 5).getValues(); // Read to column E for token
-  
-  // Find a user where both the username and the token match
-  const foundUser = usersData.find(row => row[0].toLowerCase() === username.toLowerCase() && row[4] === token);
-  return foundUser !== undefined;
+  throw new Error("Invalid username or password.");
 }
 
 function isAdmin(user) {
@@ -156,13 +182,10 @@ function handleAddUser(user, username, password, role, spAccess) {
   if (!isAdmin(user)) throw new Error("Permission denied.");
   const usersSheet = SpreadsheetApp.openById(SOURCE_DATA_SHEET_ID).getSheetByName(USERS_SHEET_NAME);
   const usernames = usersSheet.getRange("A2:A").getValues().flat();
-  if (usernames.find(u => u.toLowerCase() === username.toLowerCase())) {
-      throw new Error("Username already exists.");
-  }
+  if (usernames.includes(username)) throw new Error("Username already exists.");
   
   const passwordHash = hashPassword(password);
-  const authToken = generateAuthToken();
-  usersSheet.appendRow([username, passwordHash, role, spAccess || '', authToken]);
+  usersSheet.appendRow([username, passwordHash, role, spAccess || '']);
   return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -193,77 +216,20 @@ function handleChangePassword(user, newPassword) {
 function handleChangeMeetingType(user, sheet, newMeetingType) {
     if (!isAdmin(user)) throw new Error("Permission denied.");
     if (!newMeetingType) throw new Error("New meeting type is required.");
-
     const columns = getTodaysColumns(sheet);
     if (!columns) throw new Error("No meeting columns found for today to change.");
-
-    const { attendanceCol, financialCol } = columns;
+    const { attendanceCol } = columns;
     const today = new Date().toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
     const thirdColumnName = newMeetingType.toUpperCase() === 'SCM' ? 'Committee' : 'Financial';
-    
     sheet.getRange(1, attendanceCol).setValue(`${today} ${newMeetingType}`);
-    const oldHeader = sheet.getRange(1, financialCol).getValue();
-    const financialLotsCount = oldHeader.match(/\[(\d+)\]$/);
-
-    if (newMeetingType.toUpperCase() === 'SCM') {
-        sheet.getRange(1, financialCol).setValue(`${today} ${thirdColumnName}`);
-    } else if (financialLotsCount) {
-        sheet.getRange(1, financialCol).setValue(`${today} ${thirdColumnName} [${financialLotsCount[1]}]`);
-    } else {
-        sheet.getRange(1, financialCol).setValue(`${today} ${thirdColumnName}`);
-    }
-    
+    sheet.getRange(1, attendanceCol + 2).setValue(`${today} ${thirdColumnName}`);
     return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
-}
-
-function handleChangeSpAccess(adminUser, usernameToChange, newSpAccess) {
-  if (!isAdmin(adminUser)) throw new Error("Permission denied.");
-  const usersSheet = SpreadsheetApp.openById(SOURCE_DATA_SHEET_ID).getSheetByName(USERS_SHEET_NAME);
-  const usernames = usersSheet.getRange("A:A").getValues();
-  const rowToUpdate = usernames.findIndex(row => row[0] === usernameToChange) + 1;
-  if (rowToUpdate > 1) {
-    usersSheet.getRange(rowToUpdate, 4).setValue(newSpAccess || '');
-    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
-  }
-  throw new Error("User not found.");
-}
-
-function handleResetPassword(adminUser, usernameToChange) {
-  if (!isAdmin(adminUser)) throw new Error("Permission denied.");
-  const usersSheet = SpreadsheetApp.openById(SOURCE_DATA_SHEET_ID).getSheetByName(USERS_SHEET_NAME);
-  const usernames = usersSheet.getRange("A:A").getValues();
-  const rowToUpdate = usernames.findIndex(row => row[0] === usernameToChange) + 1;
-  if (rowToUpdate > 1) {
-    usersSheet.getRange(rowToUpdate, 2).setValue('');
-    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
-  }
-  throw new Error("User not found.");
 }
 
 // --- APP FUNCTIONALITY ---
 function findSheet(sp) {
     const ss = SpreadsheetApp.openById(DESTINATION_SHEET_ID);
     return findOrCreateDestinationSheet(ss, sp);
-}
-
-function handleGetReportDates(sp) {
-  const sheet = findSheet(sp);
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const dateRegex = /(\d{1,2}\/\d{1,2}\/\d{4})/;
-  const dates = new Set();
-
-  headers.forEach(header => {
-    if (header) {
-      const match = header.toString().match(dateRegex);
-      if (match) {
-        const parts = match[1].split('/');
-        const isoDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-        dates.add(isoDate);
-      }
-    }
-  });
-
-  return ContentService.createTextOutput(JSON.stringify({ success: true, dates: [...dates] })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function handleGetStrataPlans() {
@@ -279,39 +245,29 @@ function handleGetStrataPlans() {
 function handleBatchSubmit(requestData) {
   const submissions = requestData.submissions || [];
   if (submissions.length === 0) return ContentService.createTextOutput(JSON.stringify({ success: true, message: "No submissions to process." })).setMimeType(ContentService.MimeType.JSON);
-  
   const ss = SpreadsheetApp.openById(DESTINATION_SHEET_ID);
   const submissionsBySp = submissions.reduce((acc, sub) => {
     acc[sub.sp] = acc[sub.sp] || [];
     acc[sub.sp].push(sub);
     return acc;
   }, {});
-
   for (const sp in submissionsBySp) {
     const sheet = findOrCreateDestinationSheet(ss, sp);
+    const columns = getTodaysColumns(sheet);
+    if (!columns) continue;
+    const { attendanceCol, nameCol, financialCol } = columns;
     const lotColumnValues = sheet.getRange(2, 1, sheet.getLastRow() > 1 ? sheet.getLastRow() - 1 : 1, 1).getValues();
     const lotMap = new Map(lotColumnValues.map((row, i) => [String(row[0]).trim(), i + 2]));
-
     for (const submission of submissionsBySp[sp]) {
-      const columns = getTodaysColumns(sheet, null, null, submission.submissionDate); 
-      if (!columns) {
-          console.error(`Could not find columns for SP ${sp} on date ${submission.submissionDate} for Lot ${submission.lot}. Skipping.`);
-          continue;
-      }
-      
-      const { attendanceCol, nameCol, financialCol } = columns;
       const row = lotMap.get(String(submission.lot).trim());
       if (!row) continue;
-
       let nameString = submission.proxyHolderLot ? `Proxy - Lot ${submission.proxyHolderLot}`
         : (submission.companyRep ? `${submission.names[0]} - ${submission.companyRep}` : submission.names.join(', '));
-      
       sheet.getRange(row, attendanceCol).setValue('Y');
       sheet.getRange(row, nameCol).setValue(nameString);
       if (submission.financial) sheet.getRange(row, financialCol).setValue('Y');
     }
   }
-  
   SpreadsheetApp.flush();
   Utilities.sleep(1500);
   return ContentService.createTextOutput(JSON.stringify({ success: true, message: `${submissions.length} items processed.` })).setMimeType(ContentService.MimeType.JSON);
@@ -334,23 +290,20 @@ function handleGetAllNamesForPlan(sp) {
       const unitNumber = (rowData[1] || "").toString().trim();
       const mainContactName = (rowData[4] || "").toString().trim();
       const fullNameOnTitle = (rowData[3] || "").toString().trim();
-      
       nameCache[lotNumber] = [unitNumber, mainContactName, fullNameOnTitle];
     }
   });
   
   return ContentService.createTextOutput(JSON.stringify({ success: true, names: nameCache })).setMimeType(ContentService.MimeType.JSON);
 }
-
-
 function handleCheckTodaysColumns(sheet) {
   const columns = getTodaysColumns(sheet);
   return ContentService.createTextOutput(JSON.stringify({ success: true, columnsExist: columns !== null })).setMimeType(ContentService.MimeType.JSON);
 }
 
-function handleCreateAndFetchInitialData(sheet, meetingType, financialLots) {
+function handleCreateAndFetchInitialData(sheet, meetingType) {
   if (!meetingType) throw new Error("Meeting Type is required.");
-  getTodaysColumns(sheet, meetingType, financialLots);
+  getTodaysColumns(sheet, meetingType);
   return handleGetInitialData(sheet);
 }
 
@@ -358,20 +311,19 @@ function handleGetInitialData(sheet) {
   const columns = getTodaysColumns(sheet);
   if (!columns) return ContentService.createTextOutput(JSON.stringify({ success: true, attendanceCount: 0, totalLots: 0, attendees: [], meetingType: null })).setMimeType(ContentService.MimeType.JSON);
   
-  const { attendanceCol, nameCol, meetingType, totalLots } = columns;
-  
-  let attendanceCount = 0;
+  const { attendanceCol, nameCol, meetingType } = columns;
+  const lotColumnValues = sheet.getRange("A2:A").getValues();
+  const totalLots = lotColumnValues.filter(row => String(row[0]).trim() !== '').length;
   let attendees = [];
   if (sheet.getLastRow() > 1) {
     const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
     for (const row of data) {
       if (row[0] && row[attendanceCol - 1] === 'Y') {
-        attendanceCount++;
-        if (nameCol > 0) attendees.push({ lot: row[0], name: String(row[nameCol - 1]) });
+        attendees.push({ lot: row[0], name: String(row[nameCol - 1]) });
       }
     }
   }
-  return ContentService.createTextOutput(JSON.stringify({ success: true, attendanceCount, totalLots, attendees, meetingType })).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify({ success: true, attendanceCount: attendees.length, totalLots, attendees, meetingType })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function handleDelete(sheet, lot) {
@@ -388,25 +340,20 @@ function handleDelete(sheet, lot) {
   throw new Error(`Lot ${lot} not found.`);
 }
 
-function handleEmailPdfReport(sp, sheet, email, date) {
-  console.log(`[PDF] Starting PDF report for SP ${sp} on ${date} to be sent to ${email}.`);
+function handleEmailPdfReport(sp, sheet, email) {
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("A valid email address is required.");
-  if (!date) throw new Error("A report date is required.");
   
   const ss = SpreadsheetApp.openById(DESTINATION_SHEET_ID);
   const reportSheet = ss.getSheetByName('PDF Report');
   if (!reportSheet) throw new Error("A sheet named 'PDF Report' must exist.");
   
-  console.log("[PDF] Clearing report sheet (from B3:D).");
   if (reportSheet.getMaxRows() > 2) {
     reportSheet.getRange(3, 2, reportSheet.getMaxRows() - 2, 3).clear({contentsOnly: true, formatOnly: true});
   }
 
-  const specificDate = new Date(date).toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
-  const columns = getTodaysColumns(sheet, null, null, specificDate);
-  if (!columns) throw new Error(`Could not find attendance data for ${specificDate} to generate a report.`);
+  const columns = getTodaysColumns(sheet);
+  if (!columns) throw new Error("Could not find today's attendance data to generate a report.");
   
-  console.log(`[PDF] Found today's columns. Meeting Type: ${columns.meetingType}`);
   const { attendanceCol, nameCol, meetingType } = columns;
   let attendees = [];
   if (sheet.getLastRow() > 1) {
@@ -415,7 +362,6 @@ function handleEmailPdfReport(sp, sheet, email, date) {
       if (row[0] && row[attendanceCol - 1] === 'Y') attendees.push({ lot: row[0], name: String(row[nameCol - 1] || '') });
     }
   }
-  console.log(`[PDF] Found ${attendees.length} attendees.`);
 
   const today = new Date().toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
   
@@ -451,24 +397,16 @@ function handleEmailPdfReport(sp, sheet, email, date) {
             reportSheet.getRange(i + 3, 2, 1, 3).setBackground(null);
         }
     }
-    console.log("[PDF] Populated report sheet with attendee data.");
   } else {
     reportSheet.getRange("B3").setValue("No attendees recorded.");
-    console.log("[PDF] No attendees found, wrote message to sheet.");
   }
 
   const url = `https://docs.google.com/spreadsheets/d/${DESTINATION_SHEET_ID}/export?gid=${reportSheet.getSheetId()}&format=pdf&size=A4&portrait=true&gridlines=false&range=A1:E${reportSheet.getLastRow()}`;
   const token = ScriptApp.getOAuthToken();
-  console.log("[PDF] Fetching PDF blob from URL.");
   const response = UrlFetchApp.fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
   const blob = response.getBlob().setName(`Attendance Report - SP ${sp} - ${today}.pdf`);
   
-  console.log("[PDF] Sending email.");
-  MailApp.sendEmail(email, `Attendance Report for SP ${sp}`, "Please find the attendance report attached.", { 
-    attachments: [blob],
-    from: 'secretary@mosaicapartments.au' 
-  });
-  console.log("[PDF] Email sent successfully.");
+  MailApp.sendEmail(email, `Attendance Report for SP ${sp}`, "Please find the attendance report attached.", { attachments: [blob] });
   
   return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
 }
@@ -491,64 +429,33 @@ function findOrCreateDestinationSheet(ss, strataPlanNumber) {
   return template.copyTo(ss).setName(sheetName);
 }
 
-function getTodaysColumns(sheet, meetingType = null, financialLots = null, specificDate = null) {
-  const dateToFind = specificDate || new Date().toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
+function getTodaysColumns(sheet, meetingType = null) {
+  const today = new Date().toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   
-  const todayColIndex = headers.findIndex(header => header && header.toString().startsWith(dateToFind));
+  const todayColIndex = headers.findIndex(header => header && header.toString().startsWith(today));
   
   if (todayColIndex !== -1) {
     const headerText = headers[todayColIndex];
-    const foundMeetingType = headerText.replace(dateToFind, '').trim();
-    const financialColIndex = headers.findIndex(header => header && header.toString().includes(foundMeetingType) && (header.toString().includes("Financial") || header.toString().includes("Committee")));
-    
-    if (financialColIndex === -1) {
-        return null; 
-    }
-
-    const financialLotsHeader = headers[financialColIndex];
-    const financialLotsCount = financialLotsHeader.match(/\[(\d+)\]$/);
-    
-    let totalLotsForQuorum = sheet.getRange("A2:A").getValues().filter(String).length;
-    if (financialLotsCount) {
-        totalLotsForQuorum = parseInt(financialLotsCount[1], 10);
-    }
-
+    const foundMeetingType = headerText.replace(today, '').trim();
     return {
       attendanceCol: todayColIndex + 1,
       nameCol: todayColIndex + 2,
-      financialCol: financialColIndex + 1,
-      meetingType: foundMeetingType,
-      totalLots: totalLotsForQuorum
+      financialCol: todayColIndex + 3,
+      meetingType: foundMeetingType
     };
   }
   
   if (meetingType) {
-    const today = new Date().toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
     const lastCol = sheet.getLastColumn();
     const newAttendanceCol = lastCol > 0 ? lastCol + 1 : 1;
-    let thirdColumnName = 'Financial';
-    let totalLotsForQuorum;
-
-    if (meetingType.toUpperCase() === 'SCM') {
-        thirdColumnName = 'Committee';
-        if (financialLots === null || isNaN(parseInt(financialLots))) {
-            throw new Error("A valid number for committee members is required for an SCM.");
-        }
-        totalLotsForQuorum = parseInt(financialLots, 10);
-        sheet.getRange(1, newAttendanceCol + 2).setValue(`${today} ${thirdColumnName} [${financialLots}]`);
-    } else {
-        if (financialLots === null || isNaN(parseInt(financialLots))) {
-            throw new Error("A valid number for financial lots is required for this meeting type.");
-        }
-        totalLotsForQuorum = parseInt(financialLots, 10);
-        sheet.getRange(1, newAttendanceCol + 2).setValue(`${today} ${thirdColumnName} [${financialLots}]`);
-    }
-
+    const thirdColumnName = meetingType.toUpperCase() === 'SCM' ? 'Committee' : 'Financial';
+    
     sheet.getRange(1, newAttendanceCol).setValue(`${today} ${meetingType}`);
     sheet.getRange(1, newAttendanceCol + 1).setValue(`${today} Name`);
+    sheet.getRange(1, newAttendanceCol + 2).setValue(`${today} ${thirdColumnName}`);
     sheet.setColumnWidths(newAttendanceCol, 3, 120);
-    
+
     try {
       const sp = sheet.getName();
       const sourceInfo = getSourceSheetInfo(sp);
@@ -570,8 +477,7 @@ function getTodaysColumns(sheet, meetingType = null, financialLots = null, speci
       attendanceCol: newAttendanceCol,
       nameCol: newAttendanceCol + 1,
       financialCol: newAttendanceCol + 2,
-      meetingType: meetingType,
-      totalLots: totalLotsForQuorum
+      meetingType: meetingType
     };
   }
   
