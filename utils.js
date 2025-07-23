@@ -5,13 +5,14 @@ import { handleLogout } from './auth.js'; // Import handleLogout to fix Referenc
 export const postToServer = async (body) => {
     const headers = { 'Content-Type': 'text/plain' };
 
-    // Get the auth token from the browser's cookies
-    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
-    
     // Add the token to the request headers if it exists
+
+    // Get the token from cookies
+    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
+
 
     console.log('[CLIENT] Making POST request to server...');
     const response = await fetch(APPS_SCRIPT_URL, {
@@ -19,7 +20,7 @@ export const postToServer = async (body) => {
         mode: 'cors',
         headers: headers,
         body: JSON.stringify(body),
-        redirect: 'error'
+        redirect: 'error' 
     });
 
     if (!response.ok) {
@@ -30,8 +31,7 @@ export const postToServer = async (body) => {
 
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
-    
-    // If the server says auth failed, automatically log the user out
+
     if (jsonResponse.error && jsonResponse.error.includes("Authentication failed")) {
         handleLogout();
     }
