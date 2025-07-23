@@ -13,7 +13,12 @@ import {
 } from './auth.js';
 import {
     debounce,
-    postToServer
+    postToServer,
+    showModal,
+    showToast,
+    getSubmissionQueue,
+    saveSubmissionQueue,
+    clearStrataCache
 } from './utils.js';
 
 // --- DOM Elements ---
