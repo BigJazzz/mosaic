@@ -1,3 +1,5 @@
+import { APPS_SCRIPT_URL } from './config.js';
+
 // --- Helper for making POST requests ---
 const postToServer = async (body) => {
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
