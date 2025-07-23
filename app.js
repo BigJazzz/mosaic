@@ -20,6 +20,11 @@ import {
     saveSubmissionQueue,
     clearStrataCache
 } from './utils.js';
+import {
+    resetUiOnPlanChange,
+    renderStrataPlans,
+    updateDisplay
+} from './ui.js';
 
 // --- DOM Elements ---
 const loginSection = document.getElementById('login-section');
