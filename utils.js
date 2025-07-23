@@ -1,4 +1,4 @@
-import { APPS_SCRIPT_URL } from './config.js';
+rt import { APPS_SCRIPT_URL } from './config.js';
 
 // --- Helper for making POST requests ---
 export const postToServer = async (body) => {
@@ -36,7 +36,7 @@ export const debounce = (func, delay) => {
 
 // --- Modal Logic ---
 let modalResolve = null;
-const showModal = (text, { showInput = false, inputType = 'text', confirmText = 'Confirm', cancelText = 'Cancel', isHtml = false } = {}) => {
+export const showModal = (text, { showInput = false, inputType = 'text', confirmText = 'Confirm', cancelText = 'Cancel', isHtml = false } = {}) => {
     const modal = document.getElementById('custom-modal');
     const modalTextEl = document.getElementById('modal-text');
     const modalInputEl = document.getElementById('modal-input');
@@ -75,9 +75,9 @@ const showModal = (text, { showInput = false, inputType = 'text', confirmText = 
 
 
 // --- Caching & Queue Logic ---
-const getSubmissionQueue = () => JSON.parse(localStorage.getItem('submissionQueue') || '[]');
-const saveSubmissionQueue = (queue) => localStorage.setItem('submissionQueue', JSON.stringify(queue));
-const clearStrataCache = () => {
+export const getSubmissionQueue = () => JSON.parse(localStorage.getItem('submissionQueue') || '[]');
+export const saveSubmissionQueue = (queue) => localStorage.setItem('submissionQueue', JSON.stringify(queue));
+export const clearStrataCache = () => {
     Object.keys(localStorage).forEach(key => {
         if (key.startsWith('strata_')) {
             localStorage.removeItem(key);
@@ -99,7 +99,7 @@ const ensureToastContainer = () => {
     return container;
 };
 
-const showToast = (message, type = 'info', duration = 3000) => {
+export const showToast = (message, type = 'info', duration = 3000) => {
     const container = ensureToastContainer(); // This now guarantees the container exists
 
     const toast = document.createElement('div');
