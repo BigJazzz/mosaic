@@ -94,7 +94,8 @@ function doPost(e) {
       return handleLogin(requestData.username, requestData.password);
     }
 
-    const user = getAuthenticatedUser(e.headers);
+
+    const user = getAuthenticatedUser(e.requestHeaders);
     if (!user) {
       throw new Error("Authentication failed. Invalid or expired token.");
     }
