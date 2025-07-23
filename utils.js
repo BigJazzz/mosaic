@@ -24,7 +24,7 @@ const postToServer = async (body) => {
 };
 
 // --- Debounce helper function ---
-const debounce = (func, delay) => {
+export const debounce = (func, delay) => {
     let timeoutId;
     return (...args) => {
         clearTimeout(timeoutId);
