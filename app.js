@@ -73,10 +73,17 @@ const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
 const initializeApp = (user) => {
     try {
+        // Retrieve and log the script version
+        const scriptVersion = sessionStorage.getItem('scriptVersion');
+        if (scriptVersion) {
+            console.info(`%cBackend (GAS) Version: ${scriptVersion}`, 'color: #17a2b8; font-weight: bold;');
+        }
+
         loginSection.classList.add('hidden');
         mainAppSection.classList.remove('hidden');
         userDisplay.textContent = `${user.username} (${user.role})`;
 
+        // ... rest of the function is unchanged
         if (user.role === 'Admin') {
             adminPanel.classList.remove('hidden');
             changeMeetingTypeBtn.classList.remove('hidden');
@@ -95,7 +102,6 @@ const initializeApp = (user) => {
 
         updateSyncButton();
     } catch (error) {
-        // This will catch the error and display it in the console without logging you out.
         console.error("A critical error occurred during application startup:", error);
     }
 };
@@ -540,10 +546,12 @@ proxyCheckbox.addEventListener('change', () => {
 // --- Initial Load ---
 document.addEventListener('DOMContentLoaded', () => {
     loginForm.addEventListener('submit', async (event) => {
-        event.preventDefault(); // Prevent default form submission
-        const user = await handleLogin(event); // Await the result from the login function
-        if (user) {
-            initializeApp(user); // Initialize the app with the returned user object
+        event.preventDefault(); 
+        const loginResult = await handleLogin(event); // Capture the full result
+        
+        // Check if the login was successful and a user object exists
+        if (loginResult && loginResult.user) {
+            initializeApp(loginResult.user); // Pass the user object to initialize
         }
     });
     logoutBtn.addEventListener('click', handleLogout);

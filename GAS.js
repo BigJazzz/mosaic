@@ -166,10 +166,13 @@ function handleLogin(username, password) {
         spAccess: users[i][3] || null
       };
       const token = createToken(userPayload);
+      
+      // Add the scriptVersion to the response here
       return createJsonResponse({ 
         success: true, 
         token: token,
-        user: userPayload
+        user: userPayload,
+        scriptVersion: SCRIPT_VERSION // Add this line
       });
     }
   }

@@ -12,29 +12,35 @@ export const handleLogin = async (event) => {
     const password = document.getElementById('password').value;
     const loginStatus = document.getElementById('login-status');
     
-    if (!username) {
-        // ... (error handling)
-        return; // Return nothing on failure
+    if (!username || !password) {
+        loginStatus.textContent = 'Username and password are required.';
+        loginStatus.style.color = 'red';
+        return null;
     }
     loginStatus.textContent = 'Logging in...';
 
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
+        
         if (result.success && result.token) {
-            // Store token and user session
+            // Store token, user, and the new script version
             document.cookie = `authToken=${result.token};max-age=604800;path=/;SameSite=Lax`;
             sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
             
-            // MODIFICATION: Return the user object instead of calling initializeApp
-            return result.user; 
+            // Store the script version from the response
+            if (result.scriptVersion) {
+                sessionStorage.setItem('scriptVersion', result.scriptVersion);
+            }
+            
+            // Return the entire successful result object
+            return result; 
         } else {
             throw new Error(result.error || 'Invalid username or password.');
         }
     } catch (error) {
         loginStatus.textContent = `Login failed: ${error.message}`;
         loginStatus.style.color = 'red';
-        // Return null or allow the error to be caught by the caller
-        return null; 
+        return null;
     }
 };
 
