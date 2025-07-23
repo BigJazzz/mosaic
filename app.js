@@ -533,7 +533,13 @@ proxyCheckbox.addEventListener('change', () => {
 
 // --- Initial Load ---
 document.addEventListener('DOMContentLoaded', () => {
-    loginForm.addEventListener('submit', handleLogin);
+    loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault(); // Prevent default form submission
+        const user = await handleLogin(event); // Await the result from the login function
+        if (user) {
+            initializeApp(user); // Initialize the app with the returned user object
+        }
+    });
     logoutBtn.addEventListener('click', handleLogout);
     addUserBtn.addEventListener('click', handleAddUser);
     userListBody.addEventListener('change', (e) => {
@@ -581,6 +587,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
     if (sessionUser) {
         initializeApp(sessionUser);
+    }
+
+    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
+    const userString = sessionStorage.getItem('attendanceUser');
+    if (token && userString) {
+        const user = JSON.parse(userString);
+        initializeApp(user);
     }
 });
 

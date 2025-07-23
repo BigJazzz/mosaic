@@ -7,67 +7,36 @@ import {
 
 // --- Authentication & Session Logic ---
 export const handleLogin = async (event) => {
-    if(event) event.preventDefault(); // Allow calling without an event
+    if(event) event.preventDefault();
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
     const loginStatus = document.getElementById('login-status');
     
     if (!username) {
-        loginStatus.textContent = 'Username is required.';
-        loginStatus.style.color = 'red';
-        return;
+        // ... (error handling)
+        return; // Return nothing on failure
     }
-    // Password can be blank for first login after reset, so no check here.
     loginStatus.textContent = 'Logging in...';
-    loginStatus.style.color = 'blue';
 
     try {
         const result = await postToServer({ action: 'loginUser', username, password });
-        if (result.success) {
-            // Store token in a cookie that expires in 1 week
-            document.cookie = `authToken=${result.token};max-age=604800;path=/`;
-            document.cookie = `username=${result.user.username};max-age=604800;path=/`;
+        if (result.success && result.token) {
+            // Store token and user session
+            document.cookie = `authToken=${result.token};max-age=604800;path=/;SameSite=Lax`;
             sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
             
-            if (result.resetRequired) {
-                loginStatus.textContent = '';
-                await showModal('This is your first login. Please set a new password.', { cancelText: 'OK', isHtml: true });
-                await handleChangePassword();
-                location.reload();
-            } else {
-                 initializeApp(result.user);
-            }
+            // MODIFICATION: Return the user object instead of calling initializeApp
+            return result.user; 
         } else {
             throw new Error(result.error || 'Invalid username or password.');
         }
     } catch (error) {
         loginStatus.textContent = `Login failed: ${error.message}`;
         loginStatus.style.color = 'red';
+        // Return null or allow the error to be caught by the caller
+        return null; 
     }
 };
-
-// Auto-login check on page load
-document.addEventListener('DOMContentLoaded', () => {
-    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
-    const username = document.cookie.split('; ').find(row => row.startsWith('username='))?.split('=')[1];
-
-    if (token && username) {
-        postToServer({ action: 'loginUser', username, token })
-            .then(result => {
-                if (result.success) {
-                    document.cookie = `authToken=${result.token};max-age=604800;path=/`; // Refresh token
-                    sessionStorage.setItem('attendanceUser', JSON.stringify(result.user));
-                    initializeApp(result.user);
-                } else {
-                    handleLogout();
-                }
-            })
-            .catch(error => {
-                console.error("Error during auto-login:", error);
-                // By catching the error here, we prevent the logout and can see the error in the console.
-            });
-    }
-});
 
 export const handleLogout = () => {
     sessionStorage.removeItem('attendanceUser');
