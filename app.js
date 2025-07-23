@@ -588,6 +588,12 @@ document.addEventListener('DOMContentLoaded', () => {
     strataPlanSelect.addEventListener('change', (e) => {
         handlePlanSelection(e.target.value);
     });
+    document.getElementById('check-in-tab-btn').addEventListener('click', (event) => {
+        openTab(event, 'check-in-tab');
+    });
+    document.getElementById('admin-tab-btn').addEventListener('click', (event) => {
+        openTab(event, 'admin-tab');
+    });
 
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
     if (sessionUser) {
