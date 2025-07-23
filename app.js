@@ -101,6 +101,8 @@ const initializeApp = (user) => {
 };
 
 const handlePlanSelection = async (sp) => {
+    currentSyncedAttendees = [];
+    currentTotalLots = 0;
     document.cookie = `selectedSP=${sp};max-age=21600;path=/`;
     resetUiOnPlanChange();
     submitButton.disabled = true;
