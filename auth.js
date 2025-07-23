@@ -1,3 +1,10 @@
+// Import functions
+import {
+    postToServer,
+    showModal,
+    showToast
+} from './utils.js';
+
 // --- Authentication & Session Logic ---
 export const handleLogin = async (event) => {
     if(event) event.preventDefault(); // Allow calling without an event
