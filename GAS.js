@@ -1,5 +1,5 @@
 // --- CONFIGURATION ---
-const SCRIPT_VERSION = "v26_Internal_Token_Auth";
+const SCRIPT_VERSION = "v27_CORS_FIXED";
 const SOURCE_DATA_SHEET_ID = '143EspDcO0leMPNnUE_XJIs0YGVjdbVchq5SQMEut2Do';
 const DESTINATION_SHEET_ID = '15q4fAjDO1U_cSWEGuIdhYn2LZNkcafEYpo6zIYlRRUQ';
 const TEMPLATE_SHEET_NAME = 'Attendance Template';
@@ -8,22 +8,37 @@ const USERS_SHEET_NAME = 'Users';
 // Get the secret key from script properties
 const JWT_SECRET = PropertiesService.getScriptProperties().getProperty('JWT_SECRET');
 
-// NEW: Add a check to ensure the secret key exists.
 if (!JWT_SECRET) {
   throw new Error("CRITICAL_ERROR: 'JWT_SECRET' is not set in your Script Properties. Please go to Project Settings > Script Properties and add it.");
 }
 
 
-// --- LIBRARY-FREE TOKEN HELPER FUNCTIONS ---
+// --- CORS & RESPONSE HELPER ---
+/**
+ * Creates a JSON response with the necessary CORS headers.
+ * @param {object} data The JavaScript object to stringify and send.
+ * @returns {ContentService.TextOutput} The configured response object.
+ */
+function createJsonResponse(data) {
+  // Set a default Access-Control-Allow-Origin header
+  const headers = {
+    "Access-Control-Allow-Origin": "*", // Allow all origins
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+  
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON)
+    .withHeaders(headers);
+}
 
+
+// --- LIBRARY-FREE TOKEN HELPER FUNCTIONS ---
 function base64UrlEncode(text) {
   return Utilities.base64Encode(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function base64UrlDecode(encodedText) {
-  while (encodedText.length % 4) {
-    encodedText += '=';
-  }
+  while (encodedText.length % 4) { encodedText += '='; }
   encodedText = encodedText.replace(/-/g, '+').replace(/_/g, '/');
   return Utilities.newBlob(Utilities.base64Decode(encodedText)).getDataAsString();
 }
@@ -37,45 +52,34 @@ function createToken(userPayload) {
     'exp': Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7), // Expires in 7 days
     'user': userPayload
   };
-
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedClaims = base64UrlEncode(JSON.stringify(claims));
-  
   const signatureInput = `${encodedHeader}.${encodedClaims}`;
   const signatureBytes = Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_256, signatureInput, JWT_SECRET);
   const encodedSignature = base64UrlEncode(signatureBytes);
-
   return `${signatureInput}.${encodedSignature}`;
 }
 
 function verifyAndDecodeToken(token) {
   const parts = token.split('.');
   if (parts.length !== 3) { throw new Error("Invalid token format."); }
-
   const [encodedHeader, encodedClaims, encodedSignature] = parts;
   const signatureInput = `${encodedHeader}.${encodedClaims}`;
-  
   const expectedSignatureBytes = Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_256, signatureInput, JWT_SECRET);
   const expectedSignature = base64UrlEncode(expectedSignatureBytes);
-
   if (encodedSignature !== expectedSignature) { throw new Error("Token signature validation failed."); }
-  
   const claims = JSON.parse(base64UrlDecode(encodedClaims));
   if (claims.exp < Math.floor(Date.now() / 1000)) { throw new Error("Token has expired."); }
-  
   return claims;
 }
 
 function getAuthenticatedUser(headers) {
-    // Access the header in lowercase
     const authHeader = headers['authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return null;
-    }
-    const token = authHeader.substring(7); // Remove "Bearer "
+    if (!authHeader || !authHeader.startsWith('Bearer ')) { return null; }
+    const token = authHeader.substring(7);
     try {
         const decoded = verifyAndDecodeToken(token);
-        return decoded.user; // Return the user payload from the token
+        return decoded.user;
     } catch (e) {
         console.error("Token verification failed:", e.toString());
         return null;
@@ -94,14 +98,9 @@ function doPost(e) {
       return handleLogin(requestData.username, requestData.password);
     }
 
-    // THIS IS THE CORRECTED LINE
     const user = getAuthenticatedUser(e.headers);
+    if (!user) { throw new Error("Authentication failed. Invalid or expired token."); }
     
-    if (!user) {
-      throw new Error("Authentication failed. Invalid or expired token.");
-    }
-    
-    // The rest of the function (switch statement) remains the same
     switch(action) {
       case 'getUsers':
         return handleGetUsers(user);
@@ -134,12 +133,12 @@ function doPost(e) {
         throw new Error(`Invalid 'action' parameter provided: ${action}`);
     }
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: `[v: ${SCRIPT_VERSION}] ${error.toString()}` }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ success: false, error: `[v: ${SCRIPT_VERSION}] ${error.toString()}` });
   }
 }
 
 function doOptions(e) {
+  // This function handles the CORS preflight request.
   return ContentService.createTextOutput()
     .withHeaders({
       "Access-Control-Allow-Origin": "*",
@@ -167,11 +166,11 @@ function handleLogin(username, password) {
         spAccess: users[i][3] || null
       };
       const token = createToken(userPayload);
-      return ContentService.createTextOutput(JSON.stringify({ 
+      return createJsonResponse({ 
         success: true, 
         token: token,
         user: userPayload
-      })).setMimeType(ContentService.MimeType.JSON);
+      });
     }
   }
   throw new Error("Invalid username or password.");
@@ -190,7 +189,7 @@ function handleGetUsers(user) {
       role: row[2],
       spAccess: row[3] || ''
     }));
-  return ContentService.createTextOutput(JSON.stringify({ success: true, users })).setMimeType(ContentService.MimeType.JSON);
+  return createJsonResponse({ success: true, users });
 }
 
 function handleAddUser(user, username, password, role, spAccess) {
@@ -201,7 +200,7 @@ function handleAddUser(user, username, password, role, spAccess) {
   
   const passwordHash = hashPassword(password);
   usersSheet.appendRow([username, passwordHash, role, spAccess || '']);
-  return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+  return createJsonResponse({ success: true });
 }
 
 function handleRemoveUser(user, usernameToRemove) {
@@ -211,7 +210,7 @@ function handleRemoveUser(user, usernameToRemove) {
   const rowToDelete = usernames.findIndex(row => row[0] === usernameToRemove) + 1;
   if (rowToDelete > 1) {
     usersSheet.deleteRow(rowToDelete);
-    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ success: true });
   }
   throw new Error("User not found.");
 }
@@ -223,7 +222,7 @@ function handleChangePassword(user, newPassword) {
   if (rowToUpdate > 1) {
     const newPasswordHash = hashPassword(newPassword);
     usersSheet.getRange(rowToUpdate, 2).setValue(newPasswordHash);
-    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ success: true });
   }
   throw new Error("User not found.");
 }
@@ -238,7 +237,7 @@ function handleChangeMeetingType(user, sheet, newMeetingType) {
     const thirdColumnName = newMeetingType.toUpperCase() === 'SCM' ? 'Committee' : 'Financial';
     sheet.getRange(1, attendanceCol).setValue(`${today} ${newMeetingType}`);
     sheet.getRange(1, attendanceCol + 2).setValue(`${today} ${thirdColumnName}`);
-    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ success: true });
 }
 
 // --- APP FUNCTIONALITY ---
@@ -254,12 +253,12 @@ function handleGetStrataPlans() {
   const lastRow = sheet.getLastRow();
   const data = sheet.getRange(2, 1, lastRow > 1 ? lastRow - 1 : 1, 2).getValues();
   const plans = data.filter(row => row[0]).map(row => ({ sp: row[0], suburb: row[1] }));
-  return ContentService.createTextOutput(JSON.stringify({ success: true, plans })).setMimeType(ContentService.MimeType.JSON);
+  return createJsonResponse({ success: true, plans });
 }
 
 function handleBatchSubmit(requestData) {
   const submissions = requestData.submissions || [];
-  if (submissions.length === 0) return ContentService.createTextOutput(JSON.stringify({ success: true, message: "No submissions to process." })).setMimeType(ContentService.MimeType.JSON);
+  if (submissions.length === 0) return createJsonResponse({ success: true, message: "No submissions to process." });
   const ss = SpreadsheetApp.openById(DESTINATION_SHEET_ID);
   const submissionsBySp = submissions.reduce((acc, sub) => {
     acc[sub.sp] = acc[sub.sp] || [];
@@ -285,7 +284,7 @@ function handleBatchSubmit(requestData) {
   }
   SpreadsheetApp.flush();
   Utilities.sleep(1500);
-  return ContentService.createTextOutput(JSON.stringify({ success: true, message: `${submissions.length} items processed.` })).setMimeType(ContentService.MimeType.JSON);
+  return createJsonResponse({ success: true, message: `${submissions.length} items processed.` });
 }
 
 function handleGetAllNamesForPlan(sp) {
@@ -294,7 +293,7 @@ function handleGetAllNamesForPlan(sp) {
   const sourceSheet = SpreadsheetApp.openById(sourceInfo.id).getSheetByName(sourceInfo.tabName);
   if (!sourceSheet) throw new Error(`The data tab '${sourceInfo.tabName}' could not be found.`);
   const lastRow = sourceSheet.getLastRow();
-  if (lastRow < 2) return ContentService.createTextOutput(JSON.stringify({ success: true, names: {} })).setMimeType(ContentService.MimeType.JSON);
+  if (lastRow < 2) return createJsonResponse({ success: true, names: {} });
   
   const allData = sourceSheet.getRange(2, 3, lastRow - 1, (7 - 3 + 1)).getValues();
   const nameCache = {};
@@ -309,11 +308,12 @@ function handleGetAllNamesForPlan(sp) {
     }
   });
   
-  return ContentService.createTextOutput(JSON.stringify({ success: true, names: nameCache })).setMimeType(ContentService.MimeType.JSON);
+  return createJsonResponse({ success: true, names: nameCache });
 }
+
 function handleCheckTodaysColumns(sheet) {
   const columns = getTodaysColumns(sheet);
-  return ContentService.createTextOutput(JSON.stringify({ success: true, columnsExist: columns !== null })).setMimeType(ContentService.MimeType.JSON);
+  return createJsonResponse({ success: true, columnsExist: columns !== null });
 }
 
 function handleCreateAndFetchInitialData(sheet, meetingType) {
@@ -324,7 +324,7 @@ function handleCreateAndFetchInitialData(sheet, meetingType) {
 
 function handleGetInitialData(sheet) {
   const columns = getTodaysColumns(sheet);
-  if (!columns) return ContentService.createTextOutput(JSON.stringify({ success: true, attendanceCount: 0, totalLots: 0, attendees: [], meetingType: null })).setMimeType(ContentService.MimeType.JSON);
+  if (!columns) return createJsonResponse({ success: true, attendanceCount: 0, totalLots: 0, attendees: [], meetingType: null });
   
   const { attendanceCol, nameCol, meetingType } = columns;
   const lotColumnValues = sheet.getRange("A2:A").getValues();
@@ -338,7 +338,7 @@ function handleGetInitialData(sheet) {
       }
     }
   }
-  return ContentService.createTextOutput(JSON.stringify({ success: true, attendanceCount: attendees.length, totalLots, attendees, meetingType })).setMimeType(ContentService.MimeType.JSON);
+  return createJsonResponse({ success: true, attendanceCount: attendees.length, totalLots, attendees, meetingType });
 }
 
 function handleDelete(sheet, lot) {
@@ -350,7 +350,7 @@ function handleDelete(sheet, lot) {
   const lotRow = lotColumnValues.findIndex(row => String(row[0]).trim() == String(lot).trim()) + 2;
   if (lotRow > 1) {
     sheet.getRange(lotRow, attendanceCol, 1, 3).clearContent();
-    return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Lot ${lot} cleared.`})).setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ success: true, message: `Lot ${lot} cleared.`});
   }
   throw new Error(`Lot ${lot} not found.`);
 }
@@ -423,7 +423,7 @@ function handleEmailPdfReport(sp, sheet, email) {
   
   MailApp.sendEmail(email, `Attendance Report for SP ${sp}`, "Please find the attendance report attached.", { attachments: [blob] });
   
-  return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+  return createJsonResponse({ success: true });
 }
 
 // --- HELPER FUNCTIONS ---
