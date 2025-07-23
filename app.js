@@ -169,16 +169,13 @@ const syncSubmissions = async () => {
         if (error.message.includes("Authentication failed")) handleLogout();
     } finally {
         isSyncing = false;
-        // --- FIX STARTS HERE ---
-        // Refresh the initial data instead of re-checking for the meeting
         const initialData = await postToServer({ action: 'getInitialData', sp: strataPlanSelect.value });
         if (initialData && initialData.success) {
             currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
             currentTotalLots = initialData.totalLots;
             cleanupQueuedSubmissions();
-            updateDisplay(strataPlanSelect.value);
+            updateDisplay(strataPlanSelect.value, currentSyncedAttendees, currentTotalLots, strataPlanCache);
         }
-        // --- FIX ENDS HERE ---
         updateSyncButton();
     }
 };
@@ -315,11 +312,11 @@ const checkAndLoadMeeting = async (sp) => {
             }
         }
         if (initialData && initialData.success) {
-            currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
-            currentTotalLots = initialData.totalLots;
-            
-            cleanupQueuedSubmissions();
-            updateDisplay(sp);
+        currentSyncedAttendees = initialData.attendees.map(a => ({...a, status: 'synced'}));
+        currentTotalLots = initialData.totalLots;
+        
+        cleanupQueuedSubmissions();
+        updateDisplay(sp, currentSyncedAttendees, currentTotalLots, strataPlanCache);
 
             if (initialData.meetingType) {
                 meetingTitle.textContent = `Attendance Form - ${initialData.meetingType}`;
@@ -392,7 +389,7 @@ const handleDeleteQueued = (submissionId) => {
     let queue = getSubmissionQueue();
     queue = queue.filter(item => item.submissionId !== submissionId);
     saveSubmissionQueue(queue);
-    updateDisplay(strataPlanSelect.value);
+    updateDisplay(strataPlanSelect.value, currentSyncedAttendees, currentTotalLots, strataPlanCache);
     updateSyncButton();
 };
 
