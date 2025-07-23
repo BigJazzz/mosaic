@@ -1,11 +1,15 @@
- // --- UI & Rendering ---
-export const updateDisplay = (sp) => {
+import { getSubmissionQueue } from './utils.js';
+
+// --- UI & Rendering ---
+export const updateDisplay = (sp, currentSyncedAttendees, currentTotalLots, strataPlanCache) => {
     if (!sp) return;
     const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
     const allAttendees = [...currentSyncedAttendees, ...queuedAttendees];
     const attendedLots = new Set();
     allAttendees.forEach(attendee => attendedLots.add(String(attendee.lot)));
-    renderAttendeeTable(allAttendees);
+    
+    // Pass the cache to the render function
+    renderAttendeeTable(allAttendees, strataPlanCache);
     updateQuorumDisplay(attendedLots.size, currentTotalLots);
 };
 
@@ -45,7 +49,7 @@ export const renderStrataPlans = (plans) => {
     }
 };
 
-export const renderAttendeeTable = (attendees) => {
+export const renderAttendeeTable = (attendees, strataPlanCache) => {
     const attendeeTableBody = document.getElementById('attendee-table-body');
     const personCountSpan = document.getElementById('person-count');
     const syncedCount = attendees.filter(item => item.status !== 'queued').length;
