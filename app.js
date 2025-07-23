@@ -1,3 +1,5 @@
+import {APPS_SCRIPT_URL} from './config.js';
+
 // --- DOM Elements ---
 const loginSection = document.getElementById('login-section');
 const mainAppSection = document.getElementById('main-app');
@@ -41,7 +43,6 @@ let isSyncing = false;
 let currentSyncedAttendees = [];
 let currentTotalLots = 0;
 let autoSyncIntervalId = null;
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbww_UaQUfrSAVne8iZH_pety0FgQ1vPR4IleM3O1x2B0bRJbMoXjkJHWZFRvb1RxrYWzQ/exec';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000;
 
 const initializeApp = (user) => {
