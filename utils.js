@@ -1,4 +1,4 @@
-rt import { APPS_SCRIPT_URL } from './config.js';
+import { APPS_SCRIPT_URL } from './config.js';
 
 // --- Helper for making POST requests ---
 export const postToServer = async (body) => {
