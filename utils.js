@@ -3,7 +3,7 @@ import { handleLogout } from './auth.js'; // Import handleLogout to fix Referenc
 
 // --- Helper for making POST requests ---
 export const postToServer = async (body) => {
-    const headers = { 'Content-Type': 'text/plain' };
+    const headers = { 'Content-Type': 'application/json' };
 
     // Add the token to the request headers if it exists
 
