@@ -1,11 +1,89 @@
 // --- CONFIGURATION ---
-const SCRIPT_VERSION = "v24_Change_Meeting_Type"; 
+const SCRIPT_VERSION = "v26_Internal_Token_Auth";
 const SOURCE_DATA_SHEET_ID = '143EspDcO0leMPNnUE_XJIs0YGVjdbVchq5SQMEut2Do';
 const DESTINATION_SHEET_ID = '15q4fAjDO1U_cSWEGuIdhYn2LZNkcafEYpo6zIYlRRUQ';
 const TEMPLATE_SHEET_NAME = 'Attendance Template';
 const USERS_SHEET_NAME = 'Users';
 
-// --- MAIN HANDLERS ---
+// Get the secret key from script properties
+const JWT_SECRET = PropertiesService.getScriptProperties().getProperty('JWT_SECRET');
+
+// NEW: Add a check to ensure the secret key exists.
+if (!JWT_SECRET) {
+  throw new Error("CRITICAL_ERROR: 'JWT_SECRET' is not set in your Script Properties. Please go to Project Settings > Script Properties and add it.");
+}
+
+
+// --- LIBRARY-FREE TOKEN HELPER FUNCTIONS ---
+
+function base64UrlEncode(text) {
+  return Utilities.base64Encode(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlDecode(encodedText) {
+  while (encodedText.length % 4) {
+    encodedText += '=';
+  }
+  encodedText = encodedText.replace(/-/g, '+').replace(/_/g, '/');
+  return Utilities.newBlob(Utilities.base64Decode(encodedText)).getDataAsString();
+}
+
+function createToken(userPayload) {
+  const header = { "alg": "HS256", "typ": "JWT" };
+  const claims = {
+    'iss': 'StrataAttendanceApp',
+    'sub': userPayload.username,
+    'iat': Math.floor(Date.now() / 1000),
+    'exp': Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7), // Expires in 7 days
+    'user': userPayload
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedClaims = base64UrlEncode(JSON.stringify(claims));
+  
+  const signatureInput = `${encodedHeader}.${encodedClaims}`;
+  const signatureBytes = Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_256, signatureInput, JWT_SECRET);
+  const encodedSignature = base64UrlEncode(signatureBytes);
+
+  return `${signatureInput}.${encodedSignature}`;
+}
+
+function verifyAndDecodeToken(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3) { throw new Error("Invalid token format."); }
+
+  const [encodedHeader, encodedClaims, encodedSignature] = parts;
+  const signatureInput = `${encodedHeader}.${encodedClaims}`;
+  
+  const expectedSignatureBytes = Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_256, signatureInput, JWT_SECRET);
+  const expectedSignature = base64UrlEncode(expectedSignatureBytes);
+
+  if (encodedSignature !== expectedSignature) { throw new Error("Token signature validation failed."); }
+  
+  const claims = JSON.parse(base64UrlDecode(encodedClaims));
+  if (claims.exp < Math.floor(Date.now() / 1000)) { throw new Error("Token has expired."); }
+  
+  return claims;
+}
+
+function getAuthenticatedUser(headers) {
+    // Access the header in lowercase
+    const authHeader = headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return null;
+    }
+    const token = authHeader.substring(7); // Remove "Bearer "
+    try {
+        const decoded = verifyAndDecodeToken(token);
+        return decoded.user; // Return the user payload from the token
+    } catch (e) {
+        console.error("Token verification failed:", e.toString());
+        return null;
+    }
+}
+
+
+// --- MAIN HANDLER ---
 function doPost(e) {
   let requestData;
   try {
@@ -16,9 +94,9 @@ function doPost(e) {
       return handleLogin(requestData.username, requestData.password);
     }
 
-    const user = requestData.user;
-    if (!user || !verifyUser(user.username)) {
-      throw new Error("Authentication failed. Please log in again.");
+    const user = getAuthenticatedUser(e.headers);
+    if (!user) {
+      throw new Error("Authentication failed. Invalid or expired token.");
     }
     
     switch(action) {
@@ -71,21 +149,20 @@ function handleLogin(username, password) {
   
   for (let i = 1; i < users.length; i++) {
     if (users[i][0] === username && users[i][1] === passwordHash) {
-      return ContentService.createTextOutput(JSON.stringify({ 
-        success: true, 
+      const userPayload = { 
         username: users[i][0], 
         role: users[i][2],
         spAccess: users[i][3] || null
+      };
+      const token = createToken(userPayload);
+      return ContentService.createTextOutput(JSON.stringify({ 
+        success: true, 
+        token: token,
+        user: userPayload
       })).setMimeType(ContentService.MimeType.JSON);
     }
   }
   throw new Error("Invalid username or password.");
-}
-
-function verifyUser(username) {
-  const usersSheet = SpreadsheetApp.openById(SOURCE_DATA_SHEET_ID).getSheetByName(USERS_SHEET_NAME);
-  const usernames = usersSheet.getRange("A2:A").getValues().flat();
-  return usernames.includes(username);
 }
 
 function isAdmin(user) {
@@ -142,17 +219,13 @@ function handleChangePassword(user, newPassword) {
 function handleChangeMeetingType(user, sheet, newMeetingType) {
     if (!isAdmin(user)) throw new Error("Permission denied.");
     if (!newMeetingType) throw new Error("New meeting type is required.");
-
     const columns = getTodaysColumns(sheet);
     if (!columns) throw new Error("No meeting columns found for today to change.");
-
     const { attendanceCol } = columns;
     const today = new Date().toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
     const thirdColumnName = newMeetingType.toUpperCase() === 'SCM' ? 'Committee' : 'Financial';
-    
     sheet.getRange(1, attendanceCol).setValue(`${today} ${newMeetingType}`);
     sheet.getRange(1, attendanceCol + 2).setValue(`${today} ${thirdColumnName}`);
-    
     return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -211,18 +284,15 @@ function handleGetAllNamesForPlan(sp) {
   const lastRow = sourceSheet.getLastRow();
   if (lastRow < 2) return ContentService.createTextOutput(JSON.stringify({ success: true, names: {} })).setMimeType(ContentService.MimeType.JSON);
   
-  // Read from column C (Lot) to G (Main Contact Name)
   const allData = sourceSheet.getRange(2, 3, lastRow - 1, (7 - 3 + 1)).getValues();
   const nameCache = {};
   
   allData.forEach(rowData => {
-    const lotNumber = (rowData[0] || "").toString().trim(); // Column C
+    const lotNumber = (rowData[0] || "").toString().trim();
     if (lotNumber) {
-      const unitNumber = (rowData[1] || "").toString().trim(); // Column D
-      const mainContactName = (rowData[4] || "").toString().trim(); // Column G
-      const fullNameOnTitle = (rowData[3] || "").toString().trim(); // Column F
-      
-      // Add the unitNumber as the first item in the array
+      const unitNumber = (rowData[1] || "").toString().trim();
+      const mainContactName = (rowData[4] || "").toString().trim();
+      const fullNameOnTitle = (rowData[3] || "").toString().trim();
       nameCache[lotNumber] = [unitNumber, mainContactName, fullNameOnTitle];
     }
   });
@@ -247,18 +317,16 @@ function handleGetInitialData(sheet) {
   const { attendanceCol, nameCol, meetingType } = columns;
   const lotColumnValues = sheet.getRange("A2:A").getValues();
   const totalLots = lotColumnValues.filter(row => String(row[0]).trim() !== '').length;
-  let attendanceCount = 0;
   let attendees = [];
   if (sheet.getLastRow() > 1) {
     const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
     for (const row of data) {
       if (row[0] && row[attendanceCol - 1] === 'Y') {
-        attendanceCount++;
-        if (nameCol > 0) attendees.push({ lot: row[0], name: String(row[nameCol - 1]) });
+        attendees.push({ lot: row[0], name: String(row[nameCol - 1]) });
       }
     }
   }
-  return ContentService.createTextOutput(JSON.stringify({ success: true, attendanceCount, totalLots, attendees, meetingType })).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify({ success: true, attendanceCount: attendees.length, totalLots, attendees, meetingType })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function handleDelete(sheet, lot) {
@@ -276,14 +344,12 @@ function handleDelete(sheet, lot) {
 }
 
 function handleEmailPdfReport(sp, sheet, email) {
-  console.log(`[PDF] Starting PDF report for SP ${sp} to be sent to ${email}.`);
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("A valid email address is required.");
   
   const ss = SpreadsheetApp.openById(DESTINATION_SHEET_ID);
   const reportSheet = ss.getSheetByName('PDF Report');
   if (!reportSheet) throw new Error("A sheet named 'PDF Report' must exist.");
   
-  console.log("[PDF] Clearing report sheet (from B3:D).");
   if (reportSheet.getMaxRows() > 2) {
     reportSheet.getRange(3, 2, reportSheet.getMaxRows() - 2, 3).clear({contentsOnly: true, formatOnly: true});
   }
@@ -291,7 +357,6 @@ function handleEmailPdfReport(sp, sheet, email) {
   const columns = getTodaysColumns(sheet);
   if (!columns) throw new Error("Could not find today's attendance data to generate a report.");
   
-  console.log(`[PDF] Found today's columns. Meeting Type: ${columns.meetingType}`);
   const { attendanceCol, nameCol, meetingType } = columns;
   let attendees = [];
   if (sheet.getLastRow() > 1) {
@@ -300,7 +365,6 @@ function handleEmailPdfReport(sp, sheet, email) {
       if (row[0] && row[attendanceCol - 1] === 'Y') attendees.push({ lot: row[0], name: String(row[nameCol - 1] || '') });
     }
   }
-  console.log(`[PDF] Found ${attendees.length} attendees.`);
 
   const today = new Date().toLocaleDateString("en-AU", {timeZone: "Australia/Sydney"});
   
@@ -336,21 +400,16 @@ function handleEmailPdfReport(sp, sheet, email) {
             reportSheet.getRange(i + 3, 2, 1, 3).setBackground(null);
         }
     }
-    console.log("[PDF] Populated report sheet with attendee data.");
   } else {
     reportSheet.getRange("B3").setValue("No attendees recorded.");
-    console.log("[PDF] No attendees found, wrote message to sheet.");
   }
 
   const url = `https://docs.google.com/spreadsheets/d/${DESTINATION_SHEET_ID}/export?gid=${reportSheet.getSheetId()}&format=pdf&size=A4&portrait=true&gridlines=false&range=A1:E${reportSheet.getLastRow()}`;
   const token = ScriptApp.getOAuthToken();
-  console.log("[PDF] Fetching PDF blob from URL.");
   const response = UrlFetchApp.fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
   const blob = response.getBlob().setName(`Attendance Report - SP ${sp} - ${today}.pdf`);
   
-  console.log("[PDF] Sending email.");
   MailApp.sendEmail(email, `Attendance Report for SP ${sp}`, "Please find the attendance report attached.", { attachments: [blob] });
-  console.log("[PDF] Email sent successfully.");
   
   return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
 }
@@ -400,7 +459,6 @@ function getTodaysColumns(sheet, meetingType = null) {
     sheet.getRange(1, newAttendanceCol + 2).setValue(`${today} ${thirdColumnName}`);
     sheet.setColumnWidths(newAttendanceCol, 3, 120);
 
-    // --- NEW CODE to copy master data ---
     try {
       const sp = sheet.getName();
       const sourceInfo = getSourceSheetInfo(sp);
@@ -410,18 +468,13 @@ function getTodaysColumns(sheet, meetingType = null) {
       if (!sourceSheet) throw new Error(`Could not open source sheet tab '${sourceInfo.tabName}'.`);
       
       const lastRow = sourceSheet.getLastRow();
-      if (lastRow > 1) { // Ensure there is data beyond the header
-        // Get data from columns C and D, starting from row 2
+      if (lastRow > 1) {
         const sourceValues = sourceSheet.getRange(2, 3, lastRow - 1, 2).getValues();
-        
-        // Paste data into columns A and B of the destination sheet, starting from row 2
         sheet.getRange(2, 1, sourceValues.length, sourceValues[0].length).setValues(sourceValues);
       }
     } catch (e) {
       console.error(`Failed to copy master data for SP ${sheet.getName()}: ${e.toString()}`);
-      // This will log the error but allow the meeting setup to continue.
     }
-    // --- END OF NEW CODE ---
 
     return {
       attendanceCol: newAttendanceCol,
