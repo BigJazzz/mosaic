@@ -33,6 +33,17 @@ export const postToServer = async (body) => {
     return jsonResponse;
 };
 
+// --- Debounce helper function ---
+export const debounce = (func, delay) => {
+    let timeoutId;
+    return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+            func.apply(this, args);
+        }, delay);
+    };
+};
+
 // --- Modal Logic ---
 let modalResolve = null;
 export const showModal = (text, { showInput = false, inputType = 'text', confirmText = 'Confirm', cancelText = 'Cancel', isHtml = false } = {}) => {
