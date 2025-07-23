@@ -20,6 +20,11 @@ import {
     saveSubmissionQueue,
     clearStrataCache
 } from './utils.js';
+import {
+    resetUiOnPlanChange,
+    renderStrataPlans,
+    updateDisplay
+} from './ui.js';
 
 // --- DOM Elements ---
 const loginSection = document.getElementById('login-section');
@@ -582,6 +587,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     strataPlanSelect.addEventListener('change', (e) => {
         handlePlanSelection(e.target.value);
+    });
+    document.getElementById('check-in-tab-btn').addEventListener('click', (event) => {
+        openTab(event, 'check-in-tab');
+    });
+    document.getElementById('admin-tab-btn').addEventListener('click', (event) => {
+        openTab(event, 'admin-tab');
     });
 
     const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));

@@ -67,8 +67,11 @@ function verifyAndDecodeToken(token) {
 }
 
 function getAuthenticatedUser(headers) {
+    // Access the header in lowercase
     const authHeader = headers['authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) { return null; }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return null;
+    }
     const token = authHeader.substring(7); // Remove "Bearer "
     try {
         const decoded = verifyAndDecodeToken(token);
@@ -90,6 +93,7 @@ function doPost(e) {
     if (action === 'loginUser') {
       return handleLogin(requestData.username, requestData.password);
     }
+
 
     const user = getAuthenticatedUser(e.requestHeaders);
     if (!user) {

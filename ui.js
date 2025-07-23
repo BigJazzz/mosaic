@@ -1,5 +1,5 @@
  // --- UI & Rendering ---
-const updateDisplay = (sp) => {
+export const updateDisplay = (sp) => {
     if (!sp) return;
     const queuedAttendees = getSubmissionQueue().filter(s => s.sp === sp).map(s => ({...s, status: 'queued'}));
     const allAttendees = [...currentSyncedAttendees, ...queuedAttendees];
@@ -9,7 +9,7 @@ const updateDisplay = (sp) => {
     updateQuorumDisplay(attendedLots.size, currentTotalLots);
 };
 
-const resetUiOnPlanChange = () => {
+export const resetUiOnPlanChange = () => {
     currentSyncedAttendees = [];
     currentTotalLots = 0;
     document.getElementById('attendee-table-body').innerHTML = `<tr><td colspan="5" style="text-align:center;">Select a plan to see attendees.</td></tr>`;
@@ -24,7 +24,7 @@ const resetUiOnPlanChange = () => {
     document.getElementById('meeting-date').textContent = '';
 };
 
-const renderStrataPlans = (plans) => {
+export const renderStrataPlans = (plans) => {
     const strataPlanSelect = document.getElementById('strata-plan-select');
     if (!plans) return;
     strataPlanSelect.innerHTML = '<option value="">Select a plan...</option>';
@@ -47,7 +47,7 @@ const renderStrataPlans = (plans) => {
     }
 };
 
-const renderAttendeeTable = (attendees) => {
+export const renderAttendeeTable = (attendees) => {
     const attendeeTableBody = document.getElementById('attendee-table-body');
     const personCountSpan = document.getElementById('person-count');
     const syncedCount = attendees.filter(item => item.status !== 'queued').length;
@@ -95,7 +95,7 @@ const renderAttendeeTable = (attendees) => {
     });
 };
 
-const updateQuorumDisplay = (count = 0, total = 0) => {
+export const updateQuorumDisplay = (count = 0, total = 0) => {
     const quorumDisplay = document.getElementById('quorum-display');
     const percentage = total > 0 ? Math.floor((count / total) * 100) : 0;
     
