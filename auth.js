@@ -1,5 +1,17 @@
+// Impoer functions
+import {
+    handleLogin,
+    handleLogout,
+    loadUsers,
+    handleAddUser,
+    handleRemoveUser,
+    handleChangePassword,
+    handleChangeSpAccess,
+    handleResetPassword
+} from './auth.js';
+
 // --- Authentication & Session Logic ---
-const handleLogin = async (event) => {
+export const handleLogin = async (event) => {
     if(event) event.preventDefault(); // Allow calling without an event
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
@@ -62,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-const handleLogout = () => {
+export const handleLogout = () => {
     sessionStorage.removeItem('attendanceUser');
     // Expire the cookies by setting max-age to 0
     document.cookie = 'authToken=; max-age=0; path=/;';
@@ -70,7 +82,7 @@ const handleLogout = () => {
     location.reload();
 };
 // --- User Management (Admin) ---
-const loadUsers = async () => {
+export const loadUsers = async () => {
     try {
         const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
         if (!sessionUser) return;
@@ -110,7 +122,7 @@ const loadUsers = async () => {
     }
 };
 
-const handleAddUser = async () => {
+export const handleAddUser = async () => {
     const usernameRes = await showModal("Enter new user's username:", { showInput: true, confirmText: 'Next' });
     if (!usernameRes.confirmed || !usernameRes.value) return;
     
@@ -156,7 +168,7 @@ const handleAddUser = async () => {
     }
 };
 
-const handleRemoveUser = async (e) => {
+export const handleRemoveUser = async (e) => {
     if (!e.target.matches('.delete-btn[data-username]')) return;
     const username = e.target.dataset.username;
     
@@ -178,7 +190,7 @@ const handleRemoveUser = async (e) => {
 };
 
 // --- User Management (Self) ---
-const handleChangePassword = async () => {
+export const handleChangePassword = async () => {
     const passwordRes = await showModal("Enter your new password:", { showInput: true, inputType: 'password', confirmText: 'Change Password' });
     if (!passwordRes.confirmed) return;
     
@@ -200,7 +212,7 @@ const handleChangePassword = async () => {
     }
 };
 
-const handleChangeSpAccess = async (username) => {
+export const handleChangeSpAccess = async (username) => {
     const spAccessRes = await showModal(`Enter new SP Access for ${username} (or leave blank for all):`, { showInput: true, confirmText: 'Update' });
     if (!spAccessRes.confirmed) return;
 
@@ -218,7 +230,7 @@ const handleChangeSpAccess = async (username) => {
     }
 };
 
-const handleResetPassword = async (username) => {
+export const handleResetPassword = async (username) => {
     const confirmRes = await showModal(`Are you sure you want to reset the password for ${username}?`, { confirmText: 'Yes, Reset' });
     if (!confirmRes.confirmed) return;
 
