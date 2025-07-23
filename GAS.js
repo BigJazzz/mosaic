@@ -84,6 +84,8 @@ function getAuthenticatedUser(headers) {
 
 
 // --- MAIN HANDLER ---
+// In GAS.js
+
 function doPost(e) {
   let requestData;
   try {
@@ -94,12 +96,14 @@ function doPost(e) {
       return handleLogin(requestData.username, requestData.password);
     }
 
-
-    const user = getAuthenticatedUser(e.requestHeaders);
+    // THIS IS THE CORRECTED LINE
+    const user = getAuthenticatedUser(e.headers);
+    
     if (!user) {
       throw new Error("Authentication failed. Invalid or expired token.");
     }
     
+    // The rest of the function (switch statement) remains the same
     switch(action) {
       case 'getUsers':
         return handleGetUsers(user);
