@@ -1,4 +1,15 @@
 import {APPS_SCRIPT_URL} from './config.js';
+// Import functions
+import {
+    handleLogin,
+    handleLogout,
+    loadUsers,
+    handleAddUser,
+    handleRemoveUser,
+    handleChangePassword,
+    handleChangeSpAccess,
+    handleResetPassword
+} from './auth.js';
 
 // --- DOM Elements ---
 const loginSection = document.getElementById('login-section');
