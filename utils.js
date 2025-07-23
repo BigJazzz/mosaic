@@ -1,8 +1,11 @@
 import { APPS_SCRIPT_URL } from './config.js';
+import { handleLogout } from './auth.js'; // Import handleLogout to fix ReferenceError
 
 // --- Helper for making POST requests ---
 export const postToServer = async (body) => {
     const headers = { 'Content-Type': 'text/plain' };
+
+    // Add the token to the request headers if it exists
 
     // Get the token from cookies
     const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
@@ -10,7 +13,8 @@ export const postToServer = async (body) => {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    console.log('[CLIENT] Making POST request to server with body:', body);
+
+    console.log('[CLIENT] Making POST request to server...');
     const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'cors',
@@ -18,14 +22,16 @@ export const postToServer = async (body) => {
         body: JSON.stringify(body),
         redirect: 'error' 
     });
+
     if (!response.ok) {
         console.error('[CLIENT] Network response was not ok.', response);
         const errorText = await response.text();
         throw new Error(`Network error: ${response.statusText} - ${errorText}`);
     }
+
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
-    
+
     if (jsonResponse.error && jsonResponse.error.includes("Authentication failed")) {
         handleLogout();
     }
@@ -83,7 +89,6 @@ export const showModal = (text, { showInput = false, inputType = 'text', confirm
     });
 };
 
-
 // --- Caching & Queue Logic ---
 export const getSubmissionQueue = () => JSON.parse(localStorage.getItem('submissionQueue') || '[]');
 export const saveSubmissionQueue = (queue) => localStorage.setItem('submissionQueue', JSON.stringify(queue));
@@ -96,12 +101,9 @@ export const clearStrataCache = () => {
 };
 
 // --- Toaster Notification Logic ---
-
-// Helper function to find or create the toast container
 const ensureToastContainer = () => {
     let container = document.getElementById('toast-container');
     if (!container) {
-        console.log('Toast container not found. Creating one.');
         container = document.createElement('div');
         container.id = 'toast-container';
         document.body.appendChild(container);
@@ -110,19 +112,17 @@ const ensureToastContainer = () => {
 };
 
 export const showToast = (message, type = 'info', duration = 3000) => {
-    const container = ensureToastContainer(); // This now guarantees the container exists
+    const container = ensureToastContainer();
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
     container.appendChild(toast);
 
-    // Animate in
     setTimeout(() => {
         toast.classList.add('show');
-    }, 10); // Small delay to allow CSS transition
+    }, 10);
 
-    // Animate out and remove
     setTimeout(() => {
         toast.classList.remove('show');
         toast.addEventListener('transitionend', () => toast.remove());
