@@ -1,7 +1,7 @@
 /**
  * URL for the Google Apps Script backend.
  */
-export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzX_Jm8gOUVHWJHAbBeAmAR9RxI79pNHVCsf16IdBQshGZK7AiAqwy5GY06vTm1aZjpKA/exec';
+export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwXo8mCsBgpX45bUmAD70uGVFgu1FaUoS_JupeWlSXi6W6__b8JqWpeCzX3Yxnlm0I6Qw/exec';
 
 /**
  * Duration for how long strata plan data is cached in the browser in milliseconds.
