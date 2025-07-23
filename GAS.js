@@ -84,8 +84,6 @@ function getAuthenticatedUser(headers) {
 
 
 // --- MAIN HANDLER ---
-// In GAS.js
-
 function doPost(e) {
   let requestData;
   try {
@@ -139,6 +137,15 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: `[v: ${SCRIPT_VERSION}] ${error.toString()}` }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function doOptions(e) {
+  return ContentService.createTextOutput()
+    .withHeaders({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    });
 }
 
 // --- AUTHENTICATION & USER MANAGEMENT ---
