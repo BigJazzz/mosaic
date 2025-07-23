@@ -2,36 +2,35 @@ import { APPS_SCRIPT_URL } from './config.js';
 
 // --- Helper for making POST requests ---
 export const postToServer = async (body) => {
-    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
-    if (sessionUser) {
-        body.user = sessionUser;
+    const headers = { 'Content-Type': 'text/plain' };
+
+    // Get the token from cookies
+    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
+
     console.log('[CLIENT] Making POST request to server with body:', body);
     const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(body)
+        headers: headers,
+        body: JSON.stringify(body),
+        redirect: 'error' 
     });
     if (!response.ok) {
         console.error('[CLIENT] Network response was not ok.', response);
-        throw new Error(`Network response was not ok: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Network error: ${response.statusText} - ${errorText}`);
     }
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
-    // The check for auth failure is now handled by the function that calls postToServer.
+    
+    if (jsonResponse.error && jsonResponse.error.includes("Authentication failed")) {
+        handleLogout();
+    }
+    
     return jsonResponse;
-};
-
-// --- Debounce helper function ---
-export const debounce = (func, delay) => {
-    let timeoutId;
-    return (...args) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-            func.apply(this, args);
-        }, delay);
-    };
 };
 
 // --- Modal Logic ---
