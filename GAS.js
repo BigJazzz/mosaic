@@ -12,6 +12,14 @@ if (!JWT_SECRET) {
   throw new Error("CRITICAL_ERROR: 'JWT_SECRET' is not set in your Script Properties. Please go to Project Settings > Script Properties and add it.");
 }
 
+function doGet(e) {
+  // Return a simple text response to confirm the script is live
+  return ContentService.createTextOutput(`
+    Hello! The script with version ${SCRIPT_VERSION} is running and accessible.
+    If you are seeing this message, your deployment was successful.
+    You can now continue to test the login on your web app.
+  `);
+}
 
 // --- CORS & RESPONSE HELPER ---
 /**
