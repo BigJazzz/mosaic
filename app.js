@@ -336,10 +336,12 @@ const checkAndLoadMeeting = async (sp) => {
         currentSyncedAttendees = [];
         currentTotalLots = 0;
         cleanupQueuedSubmissions();
-        updateDisplay(sp);
+        
+        // MODIFICATION: Pass all the required parameters here
+        updateDisplay(sp, currentSyncedAttendees, currentTotalLots, strataPlanCache);
+
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'red';
-        // if (error.message.includes("Authentication failed")) handleLogout();
     }
 };
 
