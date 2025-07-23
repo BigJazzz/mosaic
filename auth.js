@@ -1,15 +1,3 @@
-// Impoer functions
-import {
-    handleLogin,
-    handleLogout,
-    loadUsers,
-    handleAddUser,
-    handleRemoveUser,
-    handleChangePassword,
-    handleChangeSpAccess,
-    handleResetPassword
-} from './auth.js';
-
 // --- Authentication & Session Logic ---
 export const handleLogin = async (event) => {
     if(event) event.preventDefault(); // Allow calling without an event
