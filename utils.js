@@ -1,25 +1,41 @@
 import { APPS_SCRIPT_URL } from './config.js';
+import { handleLogout } from './auth.js'; // Import handleLogout to fix ReferenceError
 
 // --- Helper for making POST requests ---
 export const postToServer = async (body) => {
-    const sessionUser = JSON.parse(sessionStorage.getItem('attendanceUser'));
-    if (sessionUser) {
-        body.user = sessionUser;
+    const headers = { 'Content-Type': 'text/plain' };
+
+    // Get the auth token from the browser's cookies
+    const token = document.cookie.split('; ').find(row => row.startsWith('authToken='))?.split('=')[1];
+    
+    // Add the token to the request headers if it exists
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
-    console.log('[CLIENT] Making POST request to server with body:', body);
+
+    console.log('[CLIENT] Making POST request to server...');
     const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(body)
+        headers: headers,
+        body: JSON.stringify(body),
+        redirect: 'error'
     });
+
     if (!response.ok) {
         console.error('[CLIENT] Network response was not ok.', response);
-        throw new Error(`Network response was not ok: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Network error: ${response.statusText} - ${errorText}`);
     }
+
     const jsonResponse = await response.json();
     console.log('[CLIENT] Received response from server:', jsonResponse);
-    // The check for auth failure is now handled by the function that calls postToServer.
+    
+    // If the server says auth failed, automatically log the user out
+    if (jsonResponse.error && jsonResponse.error.includes("Authentication failed")) {
+        handleLogout();
+    }
+    
     return jsonResponse;
 };
 
@@ -73,7 +89,6 @@ export const showModal = (text, { showInput = false, inputType = 'text', confirm
     });
 };
 
-
 // --- Caching & Queue Logic ---
 export const getSubmissionQueue = () => JSON.parse(localStorage.getItem('submissionQueue') || '[]');
 export const saveSubmissionQueue = (queue) => localStorage.setItem('submissionQueue', JSON.stringify(queue));
@@ -86,12 +101,9 @@ export const clearStrataCache = () => {
 };
 
 // --- Toaster Notification Logic ---
-
-// Helper function to find or create the toast container
 const ensureToastContainer = () => {
     let container = document.getElementById('toast-container');
     if (!container) {
-        console.log('Toast container not found. Creating one.');
         container = document.createElement('div');
         container.id = 'toast-container';
         document.body.appendChild(container);
@@ -100,19 +112,17 @@ const ensureToastContainer = () => {
 };
 
 export const showToast = (message, type = 'info', duration = 3000) => {
-    const container = ensureToastContainer(); // This now guarantees the container exists
+    const container = ensureToastContainer();
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
     container.appendChild(toast);
 
-    // Animate in
     setTimeout(() => {
         toast.classList.add('show');
-    }, 10); // Small delay to allow CSS transition
+    }, 10);
 
-    // Animate out and remove
     setTimeout(() => {
         toast.classList.remove('show');
         toast.addEventListener('transitionend', () => toast.remove());
